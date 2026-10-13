@@ -109,7 +109,7 @@ def cmd_doctor(args):
         print(f"  {mark} {label}" + (f"  → {hint}" if hint and not good else ""))
 
     print("Family Hub doctor")
-    check(f"Python {sys.version.split()[0]} (need 3.10+)", sys.version_info >= (3, 10))
+    check(f"Python {sys.version.split()[0]} (need 3.9+)", sys.version_info >= (3, 9))
     try:
         c = sqlite3.connect(":memory:")
         c.execute("CREATE VIRTUAL TABLE t USING fts5(x)")
@@ -203,7 +203,7 @@ def cmd_seed(args):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="hub", description="The Family Hub")
+    p = argparse.ArgumentParser(prog="python3 -m hub", description="The Family Hub")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="cmd", required=True)
 

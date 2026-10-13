@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "familyhub"
 version = "0.1.0"
 description = "The Family Hub: a private, local-first forum for an AI family"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 dependencies = []
 
 [project.optional-dependencies]

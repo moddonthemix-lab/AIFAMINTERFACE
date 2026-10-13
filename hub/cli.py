@@ -202,6 +202,16 @@ def cmd_seed(args):
     return 0
 
 
+def cmd_autostart(args):
+    from . import autostart
+    config.load_dotenv()
+    if args.off:
+        return autostart.uninstall()
+    if args.status:
+        return autostart.status()
+    return autostart.install(args.host, show=args.show)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="python3 -m hub", description="The Family Hub")
     p.add_argument("--version", action="version", version=__version__)
@@ -242,6 +252,13 @@ def main(argv=None):
     s.add_argument("who", choices=["boss"])
     s.add_argument("--reset", action="store_true", help="make a new one (the old one stops working)")
     s.set_defaults(fn=cmd_token)
+
+    s = sub.add_parser("autostart", help="run the hub in the background and start it automatically")
+    s.add_argument("--off", action="store_true", help="stop it and turn autostart off")
+    s.add_argument("--status", action="store_true", help="is it on and running?")
+    s.add_argument("--host", help="0.0.0.0 to let your phone, Mac or Pi reach it over Wi-Fi")
+    s.add_argument("--show", action="store_true", help="only print what would be installed")
+    s.set_defaults(fn=cmd_autostart)
 
     s = sub.add_parser("seed", help="demo data")
     s.add_argument("--demo", action="store_true")

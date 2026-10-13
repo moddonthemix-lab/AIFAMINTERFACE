@@ -61,6 +61,7 @@ class Hub:
         self.started = time.time()
         db.init(self.conn)
         self._settings = None
+        self._local_only = None
 
     # ------------------------------------------------------------------ plumbing
     @property
@@ -130,6 +131,7 @@ class Hub:
                 c.execute("INSERT INTO settings(key, value) VALUES (?, ?) "
                           "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (k, str(v)))
         self._settings = None
+        self._local_only = None
         return self.settings
 
     # ------------------------------------------------------------------ members & auth
@@ -273,6 +275,7 @@ class Hub:
             last = self.q1("SELECT MAX(id) FROM messages WHERE channel=?", (ch["name"],))[0]
             out.append({
                 "name": ch["name"], "purpose": ch["purpose"], "private": bool(ch["private"]),
+                "local_only": bool(ch["local_only"]),
                 "members": [r["member"] for r in self.q(
                     "SELECT member FROM channel_members WHERE channel=? ORDER BY member", (ch["name"],))]
                 if ch["private"] else None,
@@ -280,19 +283,42 @@ class Hub:
             })
         return out
 
-    def create_channel(self, name, purpose="", private=False, members=(), position=100):
+    def create_channel(self, name, purpose="", private=False, members=(), position=100, local_only=None):
+        """local_only: agents must keep this channel's messages on local AI models.
+        Private rooms are local-only unless you say otherwise."""
+        if local_only is None:
+            local_only = private
         name = (name or "").strip().lower().lstrip("#")
         if not CHANNEL_RE.match(name):
             raise HubError(400, "channel names use lowercase letters, numbers, - _ and +, like 'study-room'")
         if self.channel(name) is not None:
             raise HubError(409, f"#{name} already exists")
         with self.tx() as c:
-            c.execute("INSERT INTO channels(name, purpose, private, position, created_at) VALUES (?,?,?,?,?)",
-                      (name, (purpose or "")[:200], int(bool(private)), position, time.time()))
+            c.execute("INSERT INTO channels(name, purpose, private, position, created_at, local_only) "
+                      "VALUES (?,?,?,?,?,?)",
+                      (name, (purpose or "")[:200], int(bool(private)), position, time.time(), int(bool(local_only))))
             if private:
                 self._set_room_members(c, name, add=members)
             self._event(c, "channel", {"name": name})
+        self._local_only = None
         return name
+
+    def update_channel(self, name, purpose=None, local_only=None):
+        ch = self.channel(name)
+        if ch is None:
+            raise HubError(404, f"no channel #{name}")
+        with self.tx() as c:
+            if purpose is not None:
+                c.execute("UPDATE channels SET purpose=? WHERE name=?", (str(purpose)[:200], ch["name"]))
+            if local_only is not None:
+                c.execute("UPDATE channels SET local_only=? WHERE name=?", (int(bool(local_only)), ch["name"]))
+            self._event(c, "channel", {"name": ch["name"]})
+        self._local_only = None
+
+    def local_only_channels(self):
+        if self._local_only is None:
+            self._local_only = {r["name"] for r in self.q("SELECT name FROM channels WHERE local_only=1")}
+        return self._local_only
 
     def _set_room_members(self, c, name, add=(), remove=()):
         for mid in add or ():
@@ -356,7 +382,8 @@ class Hub:
     def msg_dict(self, r):
         return {"id": r["id"], "channel": r["channel"], "author": r["author"], "type": r["type"],
                 "text": r["text"], "data": _loads(r["data"]), "reply_to": r["reply_to"],
-                "created_at": r["created_at"], "demo": bool(r["demo"])}
+                "created_at": r["created_at"], "demo": bool(r["demo"]),
+                "local_only": r["channel"] in self.local_only_channels()}
 
     def message(self, mid):
         return self.q1("SELECT * FROM messages WHERE id=?", (mid,))
@@ -439,13 +466,19 @@ class Hub:
         return [self.msg_dict(r) for r in rows]
 
     def post_message(self, author, channel_name, type_, text=None, data=None, reply_to=None,
-                     *, enforce=True, demo=False, created_at=None):
+                     *, enforce=True, demo=False, created_at=None, client_id=None):
         """Store a message after checking its shape, permissions and the anti-chatter rules.
 
         `author` is the members row of whoever is posting (set from their token,
         never from the request body).
         """
         is_boss = author["kind"] == "boss"
+        if client_id is not None:
+            # A message re-sent from an agent's outbox: if it already arrived, return it instead of posting twice.
+            client_id = str(client_id)[:64]
+            existing = self.q1("SELECT * FROM messages WHERE author=? AND client_id=?", (author["id"], client_id))
+            if existing is not None:
+                return dict(self.msg_dict(existing), already_received=True)
         if type_ == "system" and author["id"] != "hub":
             raise HubError(400, "only the hub itself posts 'system' messages")
         ch = self.channel(channel_name)
@@ -518,10 +551,10 @@ class Hub:
             with self.tx() as c:
                 ts = created_at or time.time()
                 cur = c.execute(
-                    "INSERT INTO messages(channel, author, type, text, data, reply_to, created_at, demo) "
-                    "VALUES (?,?,?,?,?,?,?,?)",
+                    "INSERT INTO messages(channel, author, type, text, data, reply_to, created_at, demo, client_id) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
                     (ch["name"], author["id"], type_, text, json.dumps(data), root["id"] if root else None,
-                     ts, int(demo)))
+                     ts, int(demo), client_id))
                 msg = self.msg_dict(self.message(cur.lastrowid))
                 self._event(c, "message", msg, channel=ch["name"])
                 notify = {}  # member -> (kind, task_id, note); first reason wins
@@ -683,12 +716,12 @@ class Hub:
             (t["message_id"],))]
         return d
 
-    def update_task(self, member, tid, status, note=""):
+    def update_task(self, member, tid, status, note="", client_id=None):
         t = self._task(tid)
         if t is None:
             raise HubError(404, f"no task {tid}")
         return self.post_message(member, t["channel"], "task_update", note,
-                                 {"task_id": tid, "status": status, "note": note})
+                                 {"task_id": tid, "status": status, "note": note}, client_id=client_id)
 
     # ------------------------------------------------------------------ inbox
     def inbox(self, member, unread_only=False, limit=100):

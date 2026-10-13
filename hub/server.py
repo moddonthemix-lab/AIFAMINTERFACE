@@ -81,9 +81,10 @@ def post_message(h, me, q, body, name):
     data = dict(data) if isinstance(data, dict) else {} if data is None else data
     if isinstance(data, dict):
         for k, v in body.items():
-            if k not in ("type", "text", "data", "reply_to", "author") and k not in data:
+            if k not in ("type", "text", "data", "reply_to", "author", "client_id") and k not in data:
                 data[k] = v
-    return h.hub.post_message(me, name, body.get("type") or "post", body.get("text"), data, body.get("reply_to"))
+    return h.hub.post_message(me, name, body.get("type") or "post", body.get("text"), data, body.get("reply_to"),
+                              client_id=body.get("client_id"))
 
 
 @route("GET", r"/api/threads/(?P<mid>\d+)")
@@ -103,7 +104,7 @@ def get_task(h, me, q, body, tid):
 
 @route("POST", r"/api/tasks/(?P<tid>\d+)/update")
 def post_task_update(h, me, q, body, tid):
-    return h.hub.update_task(me, int(tid), body.get("status"), body.get("note") or "")
+    return h.hub.update_task(me, int(tid), body.get("status"), body.get("note") or "", body.get("client_id"))
 
 
 @route("GET", "/api/inbox")
@@ -192,9 +193,17 @@ def admin_remove_agent(h, me, q, body, mid):
 
 @route("POST", "/api/admin/channels", auth="boss")
 def admin_channel(h, me, q, body):
+    local = body.get("local_only")
     name = h.hub.create_channel(body.get("name"), body.get("purpose", ""), bool(body.get("private")),
-                                body.get("members") or [])
+                                body.get("members") or [], local_only=None if local is None else bool(local))
     return {"name": name}
+
+
+@route("POST", r"/api/admin/channels/(?P<name>[^/]+)", auth="boss")
+def admin_update_channel(h, me, q, body, name):
+    local = body.get("local_only")
+    h.hub.update_channel(name, body.get("purpose"), None if local is None else bool(local))
+    return {"ok": True}
 
 
 @route("POST", r"/api/admin/channels/(?P<name>[^/]+)/members", auth="boss")

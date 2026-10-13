@@ -132,5 +132,20 @@ def connect(path):
     return conn
 
 
+# Columns added after the first release. init() adds them to older databases.
+MIGRATIONS = [
+    ("channels", "local_only", "INTEGER NOT NULL DEFAULT 0"),   # 1 = agents must not send it to cloud AI
+    ("messages", "client_id", "TEXT"),                          # sender's id for safe re-sending
+]
+
+
 def init(conn):
     conn.executescript(SCHEMA)
+    for table, column, decl in MIGRATIONS:
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+            if (table, column) == ("channels", "local_only"):
+                conn.execute("UPDATE channels SET local_only=private")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_messages_client ON messages(author, client_id) "
+                 "WHERE client_id IS NOT NULL")

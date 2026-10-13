@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "familyhub"
+version = "0.1.0"
+description = "The Family Hub: a private, local-first forum for an AI family"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+hub = "hub.cli:main"
+
+[tool.setuptools]
+packages = ["hub"]
+py-modules = ["hub_client"]
+
+[tool.setuptools.package-data]
+hub = ["static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

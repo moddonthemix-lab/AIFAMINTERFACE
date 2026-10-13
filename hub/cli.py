@@ -101,10 +101,12 @@ def cmd_doctor(args):
     config.load_dotenv()
     ok = True
 
-    def check(label, good, hint=""):
+    def check(label, good, hint="", warn=False):
         nonlocal ok
-        ok &= bool(good)
-        print(f"  {'✅' if good else '❌'} {label}" + (f"  → {hint}" if hint and not good else ""))
+        if not warn:
+            ok &= bool(good)
+        mark = "✅" if good else "⚠️ " if warn else "❌"
+        print(f"  {mark} {label}" + (f"  → {hint}" if hint and not good else ""))
 
     print("Family Hub doctor")
     check(f"Python {sys.version.split()[0]} (need 3.10+)", sys.version_info >= (3, 10))
@@ -124,7 +126,7 @@ def cmd_doctor(args):
         check("Boss token exists", bool(hub.read_boss_token()), "run: hub token boss --reset")
         missing = [m["id"] for m in hub.members() if m["kind"] == "agent" and not m["has_token"]]
         check("All agents have tokens", not missing,
-              f"no token yet for {', '.join(missing)} (fine until you connect them): hub agent token <id>")
+              f"no token yet for {', '.join(missing)} (fine until you connect them): hub agent token <id>", warn=True)
         size = len(hub.brief(hub.member("boss")))
         check(f"/api/brief is {size} bytes (must be under 1024)", size < 1024)
     except Exception as e:  # noqa: BLE001

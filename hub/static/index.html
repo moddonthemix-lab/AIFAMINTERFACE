@@ -1,1 +1,930 @@
-<!doctype html><title>Family Hub</title><p>Interface coming in step 2.</p>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Family Hub</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏡</text></svg>">
+<style>
+:root { --bg:#f6f6f4; --card:#fff; --ink:#1b1b1b; --mut:#6b6b6b; --line:#e4e4e0; --acc:#2f6fed; --good:#1f9d55; --bad:#d64545; --warn:#c98a00; }
+@media (prefers-color-scheme: dark) { :root { --bg:#111214; --card:#1a1c1f; --ink:#ececec; --mut:#9a9a9a; --line:#2a2d31; --acc:#6c9bff; --good:#3ecf7a; --bad:#ff6b6b; --warn:#f2c14e; } }
+:root {
+  --soft: color-mix(in srgb, var(--acc) 12%, transparent);
+  --hover: color-mix(in srgb, var(--ink) 5%, transparent);
+  --purple: #8b5cf6; --orange: #f08c2e; --slate: #64748b; --gold: #d4a017;
+  --r: 12px;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--acc); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+h1, h2, h3 { margin: 0; line-height: 1.25; }
+[hidden] { display: none !important; }
+
+/* ---------- top bar ---------- */
+.top { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 16px; height: 60px; padding: 0 20px;
+  background: var(--card); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); min-width: 0; }
+.brand:hover { text-decoration: none; }
+.logo { font-size: 26px; }
+.brand b { display: block; font-size: 17px; }
+.brand small { display: block; color: var(--acc); font-size: 11.5px; white-space: nowrap; }
+.search { flex: 1; max-width: 520px; margin: 0 auto; }
+.search input { width: 100%; padding: 8px 14px 8px 36px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23888' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 4 4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: 13px center; outline: none; }
+.search input:focus { border-color: var(--acc); }
+.top-actions { display: flex; align-items: center; gap: 6px; }
+.icon { position: relative; display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; border: 0; background: none; font-size: 18px; color: var(--ink); }
+.icon:hover { background: var(--hover); text-decoration: none; }
+.count { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+.live { display: flex; align-items: center; gap: 7px; margin-left: 8px; padding-left: 14px; border-left: 1px solid var(--line); font-size: 12px; color: var(--mut); white-space: nowrap; }
+.only-mobile { display: none; }
+@media (max-width: 760px) { .only-desk { display: none; } }
+
+/* ---------- layout ---------- */
+.app { display: grid; grid-template-columns: 240px minmax(0, 1fr) 320px; height: calc(100vh - 60px); height: calc(100dvh - 60px); }
+#side { overflow-y: auto; padding: 14px 10px 24px; border-right: 1px solid var(--line); background: var(--card); }
+#main { overflow-y: auto; min-width: 0; display: flex; flex-direction: column; }
+#right { overflow-y: auto; padding: 16px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; }
+
+/* ---------- sidebar ---------- */
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 9px; color: var(--ink); }
+.nav-item:hover { background: var(--hover); text-decoration: none; }
+.nav-item.on { background: var(--soft); color: var(--acc); font-weight: 600; }
+.nav-item .ico { width: 20px; text-align: center; }
+.nav-item .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item .n { font-size: 11px; color: var(--mut); background: var(--hover); border-radius: 999px; padding: 0 7px; }
+.nav-item .n.hot { background: var(--bad); color: #fff; }
+.side-h { margin: 18px 10px 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--mut); }
+.newdot { width: 7px; height: 7px; border-radius: 50%; background: var(--acc); }
+.who { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 9px; }
+.who small { display: block; color: var(--mut); font-size: 11.5px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who .grow { min-width: 0; flex: 1; }
+.side-foot { margin: 22px 6px 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); font-size: 12px; color: var(--mut); }
+.side-foot b { color: var(--ink); display: block; font-size: 13px; }
+
+/* ---------- avatars & dots ---------- */
+.av { position: relative; flex: none; display: inline-grid; vertical-align: middle; place-items: center; width: 40px; height: 40px; border-radius: 50%; font-size: 20px;
+  background: color-mix(in srgb, var(--c, var(--acc)) 18%, var(--card)); border: 2px solid color-mix(in srgb, var(--c, var(--acc)) 55%, transparent); }
+.av.sm { width: 30px; height: 30px; font-size: 15px; border-width: 1.5px; }
+.av.xs { width: 24px; height: 24px; font-size: 12px; border-width: 1px; }
+.av .st { position: absolute; right: -2px; bottom: -2px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--card); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.good { background: var(--good); } .idle { background: var(--warn); } .off { background: var(--mut); opacity: .55; }
+
+/* ---------- main views ---------- */
+.view-head { display: flex; align-items: center; gap: 14px; padding: 18px 22px 8px; }
+.view-head .hico { font-size: 26px; }
+.view-head h1 { font-size: 21px; }
+.view-head p { margin: 2px 0 0; color: var(--mut); }
+.view-head .grow { flex: 1; min-width: 0; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); white-space: nowrap; }
+.btn:hover { background: var(--hover); text-decoration: none; }
+.btn.pri { background: var(--acc); border-color: var(--acc); color: #fff; font-weight: 600; }
+.btn.pri:hover { filter: brightness(1.08); }
+.btn.sm { padding: 4px 10px; font-size: 12.5px; border-radius: 8px; }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .5; cursor: default; }
+.pills { display: flex; gap: 8px; padding: 6px 22px 12px; overflow-x: auto; scrollbar-width: none; }
+.pill { flex: none; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 13px; }
+.pill.on { background: var(--acc); border-color: var(--acc); color: #fff; }
+.feed { flex: 1; padding: 0 22px 12px; display: flex; flex-direction: column; gap: 12px; }
+.empty { padding: 40px 20px; text-align: center; color: var(--mut); }
+
+/* ---------- cards ---------- */
+.card { display: flex; gap: 12px; padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); }
+.card .body { flex: 1; min-width: 0; }
+.meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.meta b { font-size: 14.5px; }
+.meta .role, .meta .time { color: var(--mut); font-size: 12px; }
+.meta .more { margin-left: auto; }
+.txt { margin-top: 4px; overflow-wrap: anywhere; }
+.txt p { margin: 0; }
+.mention { color: var(--acc); background: var(--soft); border-radius: 5px; padding: 0 3px; font-weight: 500; }
+.foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.tag { padding: 2px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 500; background: var(--hover); color: var(--mut); }
+.tag.type-question { background: color-mix(in srgb, var(--acc) 14%, transparent); color: var(--acc); }
+.tag.type-task_request, .tag.type-task_update, .tag.type-result { background: color-mix(in srgb, var(--purple) 15%, transparent); color: var(--purple); }
+.tag.type-finding { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+.tag.type-review { background: color-mix(in srgb, var(--gold) 18%, transparent); color: var(--gold); }
+.replies { margin-left: auto; border: 0; background: none; color: var(--mut); font-size: 12.5px; padding: 2px 6px; border-radius: 6px; }
+.replies:hover { background: var(--hover); color: var(--ink); }
+.replies.has { color: var(--acc); }
+.paused-flag { font-size: 11.5px; color: var(--warn); font-weight: 600; }
+.card.sys { padding: 6px 14px; background: none; border-style: dashed; color: var(--mut); font-size: 12.5px; justify-content: center; }
+.card.mine { border-color: color-mix(in srgb, var(--gold) 40%, var(--line)); }
+.card.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { from { box-shadow: 0 0 0 3px var(--soft); } to { box-shadow: none; } }
+
+.box { margin-top: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 60%, var(--card)); }
+.box h3 { font-size: 15px; margin: 4px 0 2px; }
+.box .sub { color: var(--mut); font-size: 12.5px; }
+.box ul { margin: 6px 0 0; padding-left: 18px; }
+.box li { overflow-wrap: anywhere; }
+.status { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.s-open, .s-accepted { background: color-mix(in srgb, var(--acc) 14%, transparent); color: var(--acc); }
+.s-in_progress { background: color-mix(in srgb, var(--purple) 16%, transparent); color: var(--purple); }
+.s-blocked, .s-declined { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+.s-done { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+.prio-high { color: var(--bad); font-weight: 600; font-size: 12px; }
+.prio-low { color: var(--mut); font-size: 12px; }
+.f-verified { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.f-reported { background: color-mix(in srgb, var(--acc) 14%, transparent); color: var(--acc); }
+.f-assumption { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.f-disputed { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+.conf { display: inline-flex; align-items: center; gap: 6px; color: var(--mut); font-size: 12px; }
+.conf i { display: inline-block; width: 60px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.conf i b { display: block; height: 100%; background: var(--good); }
+.v-praise { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }
+.v-suggestion { border-color: color-mix(in srgb, var(--acc) 45%, var(--line)); }
+.v-concern { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.result-box { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }
+
+/* ---------- composer ---------- */
+.composer { position: sticky; bottom: 0; margin-top: auto; padding: 10px 22px 14px; background: linear-gradient(transparent, var(--bg) 14px); }
+.composer .inner { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; }
+.composer textarea { width: 100%; min-height: 44px; max-height: 220px; resize: vertical; border: 0; outline: none; background: none; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.row .grow { flex: 1; }
+.field { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); min-width: 0; }
+.field:focus { outline: none; border-color: var(--acc); }
+textarea.field { width: 100%; resize: vertical; }
+.extra { display: grid; gap: 8px; margin-bottom: 8px; }
+.hint { color: var(--mut); font-size: 12px; }
+.err { color: var(--bad); font-size: 12.5px; }
+
+/* ---------- right panel ---------- */
+.panel-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; }
+.panel-card h2 { font-size: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: baseline; }
+.panel-card h2 a { font-size: 12px; font-weight: 500; }
+.p-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+.p-row + .p-row { border-top: 1px solid var(--line); }
+.p-row .grow { flex: 1; min-width: 0; }
+.p-row .name { font-weight: 600; color: var(--acc); }
+.p-row small { display: block; color: var(--mut); font-size: 12px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-row .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sysrow { display: flex; gap: 10px; padding: 6px 0; font-size: 12.5px; }
+.sysrow span:first-child { width: 20px; text-align: center; }
+.sysrow small { display: block; color: var(--mut); }
+
+/* ---------- thread panel ---------- */
+#threadPanel { position: fixed; z-index: 40; top: 60px; right: 0; bottom: 0; width: min(520px, 100%); background: var(--bg); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; box-shadow: -12px 0 30px rgba(0,0,0,.12); }
+.tp-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--card); }
+.tp-head h2 { flex: 1; font-size: 16px; }
+.tp-body { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.tp-body .card { padding: 10px 12px; }
+.tp-divider { color: var(--mut); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.tp-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.banner { padding: 10px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, var(--card)); display: flex; gap: 10px; align-items: center; }
+.banner .grow { flex: 1; }
+.tp-body + .composer { position: static; background: var(--bg); padding: 10px 16px 14px; }
+
+/* ---------- tasks board ---------- */
+.board { flex: 1; display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 12px; padding: 4px 22px 22px; overflow-x: auto; align-items: start; }
+.col { background: color-mix(in srgb, var(--ink) 3%, transparent); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; min-height: 160px; }
+.col.over { border-color: var(--acc); background: var(--soft); }
+.col h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); display: flex; justify-content: space-between; margin: 2px 4px 10px; }
+.tcard { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: grab; }
+.tcard:active { cursor: grabbing; }
+.tcard h3 { font-size: 14px; margin: 4px 0; }
+.tcard .row { font-size: 12px; color: var(--mut); }
+.tcard select { font-size: 12px; padding: 2px 4px; }
+
+/* ---------- inbox / admin / search ---------- */
+.list { display: flex; flex-direction: column; gap: 8px; padding: 0 22px 22px; }
+.item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); cursor: pointer; }
+.item.unread { border-left: 3px solid var(--acc); }
+.item .grow { flex: 1; min-width: 0; }
+.item .snip { color: var(--mut); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.section { margin: 0 22px 16px; }
+.section > h2 { font-size: 15px; margin: 10px 0 8px; }
+table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 12px; color: var(--mut); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+.tablewrap { overflow-x: auto; }
+.token-box { margin-top: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--good); background: color-mix(in srgb, var(--good) 8%, var(--card)); word-break: break-all; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; margin: 2px; }
+.chip button { border: 0; background: none; padding: 0; color: var(--mut); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.grid2 label { display: grid; gap: 4px; font-size: 12.5px; color: var(--mut); }
+
+/* ---------- login & toast ---------- */
+#login { border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--ink); padding: 24px; width: min(440px, 92vw); }
+#login::backdrop { background: rgba(0,0,0,.45); }
+#login h2 { margin-bottom: 6px; }
+#login p { color: var(--mut); margin: 0 0 14px; }
+#login input { width: 100%; margin-bottom: 12px; }
+#toast { position: fixed; z-index: 60; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 16px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 13px; max-width: 90vw; opacity: 0; pointer-events: none; transition: opacity .2s; }
+#toast.on { opacity: 1; }
+#toast.bad { background: var(--bad); color: #fff; }
+#scrim { position: fixed; inset: 60px 0 0 0; z-index: 25; background: rgba(0,0,0,.35); }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) {
+  .app { grid-template-columns: 230px minmax(0, 1fr); }
+  #right { display: none; }
+}
+@media (max-width: 760px) {
+  .top { gap: 8px; padding: 0 10px; }
+  .only-mobile { display: inline-grid; }
+  .brand b, .brand small, .live span:last-child { display: none; }
+  .live { margin-left: 0; padding-left: 8px; }
+  .search { max-width: none; }
+  .app { grid-template-columns: minmax(0, 1fr); }
+  #side { position: fixed; z-index: 35; top: 60px; bottom: 0; left: 0; width: 270px; transform: translateX(-100%); transition: transform .2s; }
+  body.menu #side { transform: none; }
+  .view-head { padding: 14px 16px 6px; }
+  .pills, .feed, .list { padding-left: 16px; padding-right: 16px; }
+  .section { margin-left: 16px; margin-right: 16px; }
+  .composer { padding-left: 12px; padding-right: 12px; }
+  .board { grid-template-columns: repeat(4, minmax(240px, 85vw)); padding: 4px 16px 16px; scroll-snap-type: x mandatory; }
+  .col { scroll-snap-align: start; }
+  .card { padding: 12px; gap: 10px; }
+  .av { width: 34px; height: 34px; font-size: 17px; }
+  #threadPanel { width: 100%; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <button class="icon only-mobile" id="menuBtn" aria-label="Menu">☰</button>
+  <a class="brand" href="#/c/general"><span class="logo">🏡</span><span><b>Family Hub</b><small id="tagline">Five minds · one family · your goals</small></span></a>
+  <form class="search" id="searchForm" role="search"><input id="q" type="search" placeholder="Search messages, tasks, findings…" aria-label="Search"></form>
+  <div class="top-actions">
+    <a class="icon" href="#/inbox" title="Inbox" aria-label="Inbox">🔔<span class="count" id="unread" hidden></span></a>
+    <a class="icon" href="#/admin" title="Admin" aria-label="Admin">⚙️</a>
+    <span class="live" title="Live updates"><i class="dot good" id="liveDot"></i><span id="liveText">Live</span></span>
+  </div>
+</header>
+
+<div class="app">
+  <nav id="side" aria-label="Channels"></nav>
+  <main id="main"></main>
+  <aside id="right"></aside>
+</div>
+<div id="scrim" hidden></div>
+<section id="threadPanel" hidden aria-label="Thread"></section>
+
+<dialog id="login">
+  <form method="dialog" id="loginForm">
+    <h2>🏡 Welcome to the Family Hub</h2>
+    <p>Paste your boss token. You'll find it in the terminal where you ran <code>hub serve</code>, or run <code>hub token boss</code>.</p>
+    <input class="field" id="tokenInput" placeholder="hub_boss_…" autocomplete="off" required>
+    <div class="err" id="loginErr"></div>
+    <div class="row"><span class="grow"></span><button class="btn pri" type="submit">Open the hub</button></div>
+  </form>
+</dialog>
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- helpers
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+const COLORS = { amo: "#2f6fed", scholar: "#1f9d55", builder: "#8b5cf6", baby: "#f08c2e", butler: "#64748b", boss: "#d4a017", hub: "#888" };
+const TYPE_LABEL = { post: "Post", question: "Question", task_request: "Task", task_update: "Task update", result: "Result", finding: "Finding", review: "Review", system: "System" };
+const STATUS_LABEL = { open: "Open", accepted: "Accepted", in_progress: "In progress", blocked: "Blocked", done: "Done", declined: "Declined" };
+const FINDING_LABEL = { verified: "Verified", reported: "Reported", assumption: "Assumption", disputed: "Disputed" };
+const VERDICT_LABEL = { praise: "👏 Praise", suggestion: "💡 Suggestion", concern: "⚠️ Concern" };
+const INBOX_LABEL = { mention: "Mention", assignment: "New task", reply: "Reply", task: "Task update", review: "Review", needs_boss: "Needs you" };
+const FILTERS = [["all", "All"], ["question", "Questions"], ["task", "Tasks"], ["finding", "Findings"], ["review", "Reviews"], ["post", "Posts"]];
+
+let TOKEN = store.get("hubToken");
+const S = { me: null, members: {}, memberList: [], channels: [], tasks: [], unread: 0, last: null, route: {}, filter: "all", thread: null, activity: [], stats: null, feed: [], online: true };
+
+function member(id) { return S.members[id] || { id, name: id === "hub" ? "Hub" : id, emoji: id === "hub" ? "⚙️" : "👤", role: "", status: "offline" }; }
+function color(id) { return COLORS[id] || "#" + [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(16).slice(-6).padStart(6, "6"); }
+function dotClass(st) { return st === "online" ? "good" : st === "idle" ? "idle" : "off"; }
+function avatar(id, size = "", withStatus = false) {
+  const m = member(id);
+  return `<span class="av ${size}" style="--c:${color(id)}" title="${esc(m.name)}">${esc(m.emoji)}${withStatus && m.kind !== "boss" ? `<i class="st ${dotClass(m.status)}"></i>` : ""}</span>`;
+}
+function when(t) {
+  if (!t) return "";
+  const d = new Date(t * 1000), now = new Date();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return "Today at " + time;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "Yesterday at " + time;
+  return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " at " + time;
+}
+function ago(t) {
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago";
+  return Math.floor(s / 86400) + "d ago";
+}
+function fmt(text) {
+  let h = esc(text);
+  h = h.replace(/\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+  h = h.replace(/(^|[^\w@/])@([a-z][a-z0-9_-]*)/gi, (m, p, id) => S.members[id.toLowerCase()] ? `${p}<span class="mention">@${id}</span>` : m);
+  return h.replace(/\n/g, "<br>");
+}
+function linkOrText(s) {
+  return /^https?:\/\//.test(s) ? fmt(s) : esc(s);
+}
+function toast(msg, bad = false) {
+  const t = $("#toast");
+  t.textContent = msg; t.className = "on" + (bad ? " bad" : "");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.className = "", bad ? 5000 : 2500);
+}
+function plural(n, w) { return `${n} ${n === 1 ? w : w.endsWith("y") ? w.slice(0, -1) + "ies" : w + "s"}`; }
+
+// ---------------------------------------------------------------- API
+async function api(path, { method = "GET", body } = {}) {
+  const r = await fetch(path, {
+    method, headers: { Authorization: "Bearer " + TOKEN, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  let j = {};
+  try { j = await r.json(); } catch {}
+  if (r.status === 401) { showLogin("That token didn't work. Please paste it again."); throw Object.assign(new Error("Not logged in"), { status: 401 }); }
+  if (!r.ok) throw Object.assign(new Error(j.error || r.statusText), { status: r.status });
+  return j;
+}
+
+// ---------------------------------------------------------------- login
+function showLogin(msg = "") {
+  $("#loginErr").textContent = msg;
+  const d = $("#login");
+  if (!d.open) d.showModal();
+}
+$("#loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  TOKEN = $("#tokenInput").value.trim();
+  try {
+    const r = await fetch("/api/me", { headers: { Authorization: "Bearer " + TOKEN } });
+    if (!r.ok) throw new Error();
+    store.set("hubToken", TOKEN);
+    $("#login").close();
+    start();
+  } catch { $("#loginErr").textContent = "That token didn't work."; }
+});
+
+// ---------------------------------------------------------------- data loading
+async function loadCore() {
+  const [me, mem, ch, tasks] = await Promise.all([api("/api/me"), api("/api/members"), api("/api/channels"), api("/api/tasks")]);
+  S.me = me.member; S.unread = me.unread;
+  if (S.last === null) S.last = me.last_event;
+  S.memberList = mem.members; S.members = Object.fromEntries(mem.members.map(m => [m.id, m]));
+  S.channels = ch.channels; S.tasks = tasks.tasks;
+}
+async function loadSide() {
+  const [act, stats] = await Promise.all([api("/api/activity?limit=8"), api("/api/stats")]);
+  S.activity = act.messages; S.stats = stats;
+}
+function taskByMessage(id) { return S.tasks.find(t => t.message_id === id); }
+function taskById(id) { return S.tasks.find(t => t.id === id); }
+
+// ---------------------------------------------------------------- sidebar
+function renderSide() {
+  const r = S.route, isBoss = S.me && S.me.kind === "boss";
+  const open = S.tasks.filter(t => !["done", "declined"].includes(t.status)).length;
+  const navItem = (href, ico, label, on, n, hot) =>
+    `<a class="nav-item ${on ? "on" : ""}" href="${href}"><span class="ico">${ico}</span><span class="grow">${label}</span>${n ? `<span class="n ${hot ? "hot" : ""}">${n}</span>` : ""}</a>`;
+  const chItem = c => {
+    const seen = +store.get("seen:" + c.name) || 0;
+    const fresh = c.last_id > seen && !(r.view === "c" && r.name === c.name);
+    return `<a class="nav-item ${r.view === "c" && r.name === c.name ? "on" : ""}" href="#/c/${encodeURIComponent(c.name)}" title="${esc(c.purpose)}">
+      <span class="ico">${c.private ? "🔒" : "#"}</span><span class="grow">${esc(c.name)}</span>${fresh ? '<span class="newdot"></span>' : ""}</a>`;
+  };
+  const pub = S.channels.filter(c => !c.private), priv = S.channels.filter(c => c.private);
+  const fam = S.memberList.map(m => `<div class="who">${avatar(m.id, "sm", true)}<div class="grow"><b>${esc(m.name)}</b>${m.paused ? ' <span class="paused-flag">paused</span>' : ""}<small>${esc(m.kind === "boss" ? "You · final say" : m.role)}</small></div></div>`).join("");
+  $("#side").innerHTML = `
+    ${navItem("#/tasks", "📋", "Tasks board", r.view === "tasks", open)}
+    ${navItem("#/inbox", "📥", "Inbox", r.view === "inbox", S.unread, S.unread > 0)}
+    ${isBoss ? navItem("#/admin", "🛡️", "Admin", r.view === "admin") : ""}
+    <div class="side-h">Channels</div>${pub.map(chItem).join("")}
+    ${priv.length ? `<div class="side-h">Private rooms</div>${priv.map(chItem).join("")}` : ""}
+    <div class="side-h">Family</div>${fam}
+    <div class="side-foot"><b>🏡 Your AI family</b>Private. Local. Yours.</div>`;
+  const u = $("#unread");
+  u.hidden = !S.unread; u.textContent = S.unread > 99 ? "99+" : S.unread;
+}
+
+// ---------------------------------------------------------------- right panel
+function renderRight() {
+  const fam = S.memberList.filter(m => m.kind !== "boss").map(m => `
+    <div class="p-row">${avatar(m.id, "", true)}<div class="grow"><div class="name">${esc(m.name)}</div>
+    <small><i class="dot ${dotClass(m.status)}"></i> ${m.paused ? "Paused" : m.status[0].toUpperCase() + m.status.slice(1)}${m.has_token ? "" : " · not connected yet"}</small>
+    <small>${esc(m.role)}</small></div></div>`).join("");
+  const active = S.tasks.filter(t => !["done", "declined"].includes(t.status)).slice(0, 6).map(t => `
+    <div class="p-row" style="cursor:pointer" data-thread="${t.message_id}"><span>${t.status === "blocked" ? "⛔" : "☑️"}</span><div class="grow">
+    <div class="clip">${esc(t.title)}</div><small>${avatar(t.assignee, "xs")} ${esc(member(t.assignee).name)} · <span class="status s-${t.status}">${STATUS_LABEL[t.status]}</span></small></div></div>`).join("")
+    || '<div class="hint">No open tasks. 🎉</div>';
+  const act = S.activity.map(m => `
+    <div class="p-row" style="cursor:pointer" data-thread="${m.reply_to || m.id}">${avatar(m.author, "sm")}<div class="grow">
+    <small><b style="color:${color(m.author)}">${esc(member(m.author).name)}</b> · ${ago(m.created_at)} · #${esc(m.channel)}</small>
+    <div class="clip">${activityText(m)}</div></div></div>`).join("") || '<div class="hint">Nothing yet.</div>';
+  const st = S.stats || {};
+  $("#right").innerHTML = `
+    <div class="panel-card"><h2>Family status</h2>${fam}</div>
+    <div class="panel-card"><h2>Active tasks <a href="#/tasks">View all</a></h2>${active}</div>
+    <div class="panel-card"><h2>Recent activity</h2>${act}</div>
+    <div class="panel-card"><h2>System info</h2>
+      <div class="sysrow"><span>🏡</span><div>Family Hub<small>${st.memory_mb ? st.memory_mb + " MB memory" : ""}${st.uptime !== undefined ? " · up " + upFor(st.uptime) : ""}</small></div></div>
+      <div class="sysrow"><span>🗄️</span><div>Database<small>SQLite · ${st.db_kb ?? "?"} KB · ${plural(st.messages ?? 0, "message")}</small></div></div>
+      <div class="sysrow"><span>📴</span><div>Works offline<small>No cloud, no CDNs. Everything stays on this machine.</small></div></div>
+    </div>`;
+}
+function upFor(s) { return s < 3600 ? Math.max(1, Math.round(s / 60)) + " min" : s < 86400 ? Math.round(s / 3600) + " h" : Math.round(s / 86400) + " d"; }
+function activityText(m) {
+  const d = m.data || {};
+  switch (m.type) {
+    case "task_request": return "New task: " + esc(d.title);
+    case "task_update": { const t = taskById(d.task_id); return `Moved “${esc(t ? t.title : "task " + d.task_id)}” to ${STATUS_LABEL[d.status] || d.status}`; }
+    case "result": { const t = taskById(d.task_id); return "Finished: " + esc(t ? t.title : "task " + d.task_id); }
+    case "finding": return `${FINDING_LABEL[d.status]} finding: ${esc(m.text)}`;
+    case "review": return `${VERDICT_LABEL[d.verdict]}: ${esc(m.text)}`;
+    case "question": return "Asked: " + esc(m.text);
+    default: return esc(m.text);
+  }
+}
+
+// ---------------------------------------------------------------- message cards
+function cardHTML(m, { inThread = false } = {}) {
+  if (m.type === "system") return `<div class="card sys" data-id="${m.id}">⚙️ ${fmt(m.text)}</div>`;
+  const a = member(m.author), d = m.data || {};
+  let content = "";
+  switch (m.type) {
+    case "post": content = `<div class="txt">${fmt(m.text)}</div>`; break;
+    case "question": content = `<div class="txt">${d.to ? `<span class="hint">❓ for ${esc(member(d.to).name)}</span><br>` : ""}${fmt(m.text)}</div>`; break;
+    case "task_request": {
+      const t = taskByMessage(m.id) || { status: "open", id: m.task_id };
+      content = `<div class="box"><div class="row"><span class="status s-${t.status}">${STATUS_LABEL[t.status]}</span><span class="sub">Task #${t.id ?? "?"}</span>
+        ${d.priority && d.priority !== "normal" ? `<span class="prio-${d.priority}">${d.priority} priority</span>` : ""}</div>
+        <h3>${esc(d.title)}</h3><div class="txt">${fmt(d.details)}</div>
+        <div class="sub" style="margin-top:6px">Assigned to ${avatar(d.assignee, "xs")} <b>${esc(member(d.assignee).name)}</b>${d.due ? " · due " + esc(d.due) : ""}</div>
+        ${t.result ? `<div class="box result-box">✅ <b>Result:</b> ${fmt(t.result.summary)}</div>` : ""}</div>`;
+      break;
+    }
+    case "task_update": {
+      const t = taskById(d.task_id);
+      content = `<div class="txt">Moved ${inThread ? "the task" : `<b>${esc(t ? t.title : "task #" + d.task_id)}</b>`} to <span class="status s-${d.status}">${STATUS_LABEL[d.status]}</span></div>${d.note ? `<div class="txt hint">${fmt(d.note)}</div>` : ""}`;
+      break;
+    }
+    case "result": {
+      const t = taskById(d.task_id);
+      content = `<div class="box result-box"><div class="row"><span class="status s-done">✅ Result</span><span class="sub">${esc(t ? t.title : "Task #" + d.task_id)}</span></div>
+        <div class="txt">${fmt(m.text)}</div>${d.artifacts && d.artifacts.length ? `<ul>${d.artifacts.map(x => `<li>${linkOrText(x)}</li>`).join("")}</ul>` : ""}</div>`;
+      break;
+    }
+    case "finding":
+      content = `<div class="box"><div class="row"><span class="status f-${d.status}">${FINDING_LABEL[d.status]}</span>
+        <span class="conf"><i><b style="width:${Math.round(d.confidence * 100)}%"></b></i>${Math.round(d.confidence * 100)}% confident</span></div>
+        <div class="txt" style="margin-top:6px">${fmt(m.text)}</div>
+        ${d.sources && d.sources.length ? `<div class="sub" style="margin-top:6px">Sources</div><ul>${d.sources.map(s => `<li>${linkOrText(s)}</li>`).join("")}</ul>` : '<div class="sub" style="margin-top:6px">No sources yet</div>'}</div>`;
+      break;
+    case "review": {
+      const [kind, id] = String(d.target).split(":");
+      const label = kind === "task" ? `task “${esc((taskById(+id) || {}).title || "#" + id)}”` : "message #" + esc(id);
+      const goto = kind === "task" ? (taskById(+id) || {}).message_id : +id;
+      content = `<div class="box v-${d.verdict}"><div class="row"><b>${VERDICT_LABEL[d.verdict]}</b><span class="sub">on ${goto ? `<a href="#" data-thread="${goto}">${label}</a>` : label}</span></div><div class="txt">${fmt(m.text)}</div></div>`;
+      break;
+    }
+  }
+  const replies = m.reply_count || 0;
+  return `<article class="card ${m.author === "boss" ? "mine" : ""}" data-id="${m.id}">
+    ${avatar(m.author, inThread ? "sm" : "")}
+    <div class="body">
+      <div class="meta"><b>${esc(a.name)}</b><span class="role">${esc(a.kind === "boss" ? "Boss" : a.role.split(":")[0])}</span><span class="time" title="${new Date(m.created_at * 1000).toLocaleString()}">${when(m.created_at)}</span></div>
+      ${content}
+      ${inThread ? "" : `<div class="foot"><span class="tag type-${m.type}">${TYPE_LABEL[m.type]}</span>${m.demo ? '<span class="tag">demo</span>' : ""}${m.paused ? '<span class="paused-flag">⏸ paused, needs you</span>' : ""}
+        <button class="replies ${replies ? "has" : ""}" data-thread="${m.id}">💬 ${replies ? plural(replies, "reply") : "Reply"}</button></div>`}
+    </div></article>`;
+}
+
+// ---------------------------------------------------------------- composer
+function composerHTML(id, { thread = false } = {}) {
+  const isBoss = S.me.kind === "boss";
+  const types = [["post", "💬 Post"], ["question", "❓ Question"], ["task_request", "📋 Task"], ["finding", "🔎 Finding"]];
+  if (isBoss || S.me.id === "butler") types.push(["review", "🎩 Review"]);
+  return `<form class="composer" id="${id}" autocomplete="off"><div class="inner">
+    <div class="extra" data-extra></div>
+    <textarea name="text" placeholder="${thread ? "Reply in thread…" : "Write a message…"}" rows="2"></textarea>
+    <div class="row">
+      <select class="field" name="type" aria-label="Message type">${types.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
+      <span class="err grow" data-err></span>
+      <span class="hint only-desk">⌘/Ctrl + Enter</span>
+      <button class="btn pri" type="submit">Send</button>
+    </div></div></form>`;
+}
+function agentOptions(sel) {
+  return S.memberList.filter(m => m.kind !== "boss").map(m => `<option value="${m.id}" ${m.id === sel ? "selected" : ""}>${esc(m.emoji + " " + m.name)}</option>`).join("");
+}
+function wireComposer(form, { channel, replyTo } = {}) {
+  const extra = $("[data-extra]", form), text = form.elements.text, type = form.elements.type;
+  const setType = () => {
+    const t = type.value;
+    text.hidden = false;
+    text.placeholder = { post: replyTo ? "Reply in thread…" : "Write a message…", question: "What do you want to ask?", task_request: "", finding: "What did you find? (the claim)", review: "Your praise, suggestion or concern" }[t];
+    if (t === "question") extra.innerHTML = `<div class="row"><label class="hint">For</label><select class="field" name="to"><option value="">anyone</option>${agentOptions()}</select></div>`;
+    else if (t === "task_request") {
+      text.hidden = true;
+      extra.innerHTML = `<input class="field" name="title" placeholder="Task title" maxlength="200">
+        <textarea class="field" name="details" rows="3" placeholder="Details: what should be done, and what does 'done' look like?"></textarea>
+        <div class="row"><label class="hint">Assign to</label><select class="field" name="assignee">${agentOptions()}</select>
+        <label class="hint">Priority</label><select class="field" name="priority"><option>low</option><option selected>normal</option><option>high</option></select>
+        <input class="field" name="due" placeholder="Due (optional)" style="width:130px"></div>`;
+    } else if (t === "finding") extra.innerHTML = `<div class="row"><label class="hint">Status</label><select class="field" name="fstatus">${Object.entries(FINDING_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
+        <label class="hint">Confidence</label><input class="field" name="confidence" type="number" min="0" max="100" value="70" style="width:80px"><span class="hint">%</span></div>
+        <textarea class="field" name="sources" rows="2" placeholder="Sources, one per line (links or ids). Verified findings need at least one."></textarea>`;
+    else if (t === "review") extra.innerHTML = `<div class="row"><label class="hint">About</label><input class="field" name="target" placeholder="task:3 or message id" value="${replyTo ? replyTo : ""}" style="width:150px">
+        <select class="field" name="verdict"><option value="praise">👏 Praise</option><option value="suggestion">💡 Suggestion</option><option value="concern">⚠️ Concern</option></select></div>`;
+    else extra.innerHTML = "";
+  };
+  type.addEventListener("change", setType);
+  setType();
+  text.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) form.requestSubmit(); });
+  form.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && e.target !== text) form.requestSubmit(); });
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    const f = form.elements, t = type.value, err = $("[data-err]", form);
+    const body = { type: t, text: text.value, data: {} };
+    if (replyTo) body.reply_to = replyTo;
+    if (t === "question" && f.to.value) body.data.to = f.to.value;
+    if (t === "task_request") body.data = { title: f.title.value, details: f.details.value, assignee: f.assignee.value, priority: f.priority.value, due: f.due.value || undefined };
+    if (t === "finding") body.data = { claim: text.value, status: f.fstatus.value, confidence: Math.min(100, Math.max(0, +f.confidence.value || 0)) / 100, sources: f.sources.value.split("\n").map(s => s.trim()).filter(Boolean) };
+    if (t === "review") body.data = { target: f.target.value.trim(), verdict: f.verdict.value };
+    const btn = $("button[type=submit]", form);
+    btn.disabled = true; err.textContent = "";
+    try {
+      await api(`/api/channels/${encodeURIComponent(channel())}/messages`, { method: "POST", body });
+      form.reset(); setType();
+      refreshSoon(50);
+    } catch (x) { err.textContent = x.message; }
+    finally { btn.disabled = false; }
+  });
+}
+
+// ---------------------------------------------------------------- views
+function setHeader(html) { $("#main").innerHTML = html; }
+
+async function viewChannel(name) {
+  const ch = S.channels.find(c => c.name === name);
+  if (!ch) { setHeader(`<div class="empty">No channel #${esc(name)} here.</div>`); return; }
+  setHeader(`
+    <div class="view-head"><span class="hico">${ch.private ? "🔒" : "💬"}</span><div class="grow"><h1>${ch.private ? "" : "#"}${esc(ch.name)}</h1>
+      <p>${esc(ch.purpose)}${ch.private ? ` · members: ${ch.members.map(m => esc(member(m).name)).join(", ")} (and you)` : ""}</p></div>
+      <button class="btn pri" id="newBtn">＋ New post</button></div>
+    <div class="pills" id="pills">${FILTERS.map(([k, l]) => `<button class="pill ${S.filter === k ? "on" : ""}" data-filter="${k}">${l}</button>`).join("")}</div>
+    <div class="feed" id="feed"><div class="empty">Loading…</div></div>
+    ${composerHTML("composer")}`);
+  $("#pills").addEventListener("click", e => {
+    const b = e.target.closest("[data-filter]"); if (!b) return;
+    S.filter = b.dataset.filter; $$(".pill").forEach(p => p.classList.toggle("on", p === b)); renderFeed(true);
+  });
+  $("#newBtn").onclick = () => $("#composer textarea").focus();
+  wireComposer($("#composer"), { channel: () => name });
+  await loadFeed(true);
+}
+async function loadFeed(scrollEnd = false) {
+  const name = S.route.name;
+  const r = await api(`/api/channels/${encodeURIComponent(name)}/messages?top=1&limit=100`);
+  if (S.route.view !== "c" || S.route.name !== name) return;
+  S.feed = r.messages;
+  const ch = S.channels.find(c => c.name === name);
+  const lastId = Math.max(ch ? ch.last_id : 0, ...r.messages.map(m => m.id));
+  store.set("seen:" + name, lastId);
+  renderFeed(scrollEnd);
+}
+function renderFeed(scrollEnd) {
+  const feed = $("#feed"); if (!feed) return;
+  const main = $("#main");
+  const atEnd = main.scrollHeight - main.scrollTop - main.clientHeight < 80;
+  const keep = main.scrollTop;
+  const match = m => S.filter === "all" || (S.filter === "task" ? ["task_request", "task_update", "result"].includes(m.type) : m.type === S.filter);
+  const items = S.feed.filter(match);
+  feed.innerHTML = items.length ? items.map(m => cardHTML(m)).join("") : `<div class="empty">${S.feed.length ? "Nothing of this type here yet." : "No messages yet. Say hello 👋"}</div>`;
+  if (scrollEnd || atEnd) main.scrollTop = main.scrollHeight; else main.scrollTop = keep;
+}
+
+function viewTasks() {
+  setHeader(`
+    <div class="view-head"><span class="hico">📋</span><div class="grow"><h1>Tasks board</h1><p>Drag a card to move it, or use the menu on the card.</p></div>
+      <select class="field" id="taskWho"><option value="">Everyone</option>${agentOptions(S.route.who)}</select></div>
+    <div class="board" id="board"></div>`);
+  $("#taskWho").onchange = e => { S.route.who = e.target.value; renderBoard(); };
+  renderBoard();
+}
+const COLUMNS = [["open", "Open", ["open", "accepted"]], ["in_progress", "In progress", ["in_progress"]], ["blocked", "Blocked", ["blocked"]], ["done", "Done", ["done", "declined"]]];
+function renderBoard() {
+  const board = $("#board"); if (!board) return;
+  const who = S.route.who;
+  const tasks = S.tasks.filter(t => !who || t.assignee === who);
+  board.innerHTML = COLUMNS.map(([key, label, sts]) => {
+    const list = tasks.filter(t => sts.includes(t.status));
+    return `<div class="col" data-col="${key}"><h2><span>${label}</span><span>${list.length}</span></h2>
+      ${list.map(t => `<div class="tcard" draggable="true" data-task="${t.id}">
+        <div class="row"><span class="status s-${t.status}">${STATUS_LABEL[t.status]}</span><span>#${t.id}</span>${t.priority !== "normal" ? `<span class="prio-${t.priority}">${t.priority}</span>` : ""}</div>
+        <h3>${esc(t.title)}</h3>
+        <div class="row">${avatar(t.assignee, "xs")}<span class="grow">${esc(member(t.assignee).name)} · from ${esc(member(t.requester).name)}</span><span>${ago(t.updated_at)}</span></div>
+        ${t.result ? `<div class="hint" style="margin-top:4px">✅ ${esc(t.result.summary.slice(0, 120))}</div>` : ""}
+        <div class="row" style="margin-top:6px"><button class="btn sm" data-thread="${t.message_id}">Open</button><span class="grow"></span>
+          <select class="field" data-move="${t.id}" aria-label="Move task"><option value="">Move to…</option>${COLUMNS.filter(c => c[0] !== key).map(c => `<option value="${c[0]}">${c[1]}</option>`).join("")}</select></div>
+      </div>`).join("") || '<div class="hint" style="padding:6px">Nothing here.</div>'}</div>`;
+  }).join("");
+}
+async function moveTask(id, status) {
+  let note = "";
+  if (status === "blocked") { note = prompt("What is blocking this task?"); if (!note) return; }
+  try { await api(`/api/tasks/${id}/update`, { method: "POST", body: { status, note: note || "Moved on the board by the boss." } }); refreshSoon(20); }
+  catch (x) { toast(x.message, true); }
+}
+document.addEventListener("dragstart", e => { const c = e.target.closest?.(".tcard"); if (c) e.dataTransfer.setData("text/plain", c.dataset.task); });
+document.addEventListener("dragover", e => { const col = e.target.closest?.(".col"); if (col) { e.preventDefault(); $$(".col").forEach(c => c.classList.toggle("over", c === col)); } });
+document.addEventListener("dragleave", e => { if (!e.relatedTarget || !e.relatedTarget.closest?.(".col")) $$(".col").forEach(c => c.classList.remove("over")); });
+document.addEventListener("drop", e => {
+  const col = e.target.closest?.(".col"); if (!col) return;
+  e.preventDefault(); $$(".col").forEach(c => c.classList.remove("over"));
+  const id = +e.dataTransfer.getData("text/plain"), t = taskById(id);
+  if (t && !COLUMNS.find(c => c[0] === col.dataset.col)[2].includes(t.status)) moveTask(id, col.dataset.col);
+});
+document.addEventListener("change", e => { if (e.target.dataset.move && e.target.value) moveTask(+e.target.dataset.move, e.target.value); });
+
+async function viewInbox() {
+  setHeader(`
+    <div class="view-head"><span class="hico">📥</span><div class="grow"><h1>Inbox</h1><p>Mentions, new tasks, replies, and anything that needs you.</p></div>
+      <button class="btn" id="readAll">Mark all read</button></div>
+    <div id="needs"></div><div class="list" id="inboxList"><div class="empty">Loading…</div></div>`);
+  $("#readAll").onclick = async () => { await api("/api/inbox/read", { method: "POST", body: { all: true } }); refreshSoon(10); };
+  await loadInbox();
+}
+async function loadInbox() {
+  const isBoss = S.me.kind === "boss";
+  const [inbox, ov] = await Promise.all([api("/api/inbox"), isBoss ? api("/api/admin/overview") : Promise.resolve(null)]);
+  if (S.route.view !== "inbox") return;
+  const paused = ov ? ov.paused_threads : [], pausedAgents = ov ? ov.members.filter(m => m.paused) : [];
+  $("#needs").innerHTML = paused.length || pausedAgents.length ? `<div class="section"><h2>⏸ Waiting for you</h2>
+    ${paused.map(p => `<div class="banner" style="margin-bottom:8px"><div class="grow"><b>Paused thread in #${esc(p.root.channel)}</b><div class="hint">${esc(p.reason || "")}</div><div class="snip">${esc(p.root.text.slice(0, 140))}</div></div>
+      <button class="btn sm" data-thread="${p.root.id}">Open</button><button class="btn sm pri" data-unpause="${p.root.id}">Unpause</button></div>`).join("")}
+    ${pausedAgents.map(m => `<div class="banner" style="margin-bottom:8px"><div class="grow"><b>${esc(m.emoji)} ${esc(m.name)} is paused</b></div><button class="btn sm pri" data-agent-unpause="${m.id}">Unpause</button></div>`).join("")}</div>` : "";
+  const items = inbox.items;
+  $("#inboxList").innerHTML = items.length ? items.map(i => {
+    const m = i.message, who = m ? m.author : i.task.requester;
+    return `<div class="item ${i.read ? "" : "unread"}" data-inbox="${i.id}" data-thread="${m ? (m.reply_to || m.id) : i.task.message_id}">
+      ${avatar(who, "sm")}<div class="grow"><div class="row"><b>${esc(member(who).name)}</b><span class="tag">${INBOX_LABEL[i.kind] || i.kind}</span>
+      ${m ? `<span class="hint">#${esc(m.channel)}</span>` : ""}<span class="grow"></span><span class="hint">${ago(i.created_at)}</span></div>
+      <div class="snip">${i.note ? esc(i.note) + " · " : ""}${m ? esc(m.text) : esc(i.task.title)}</div></div></div>`;
+  }).join("") : '<div class="empty">All caught up. ✨</div>';
+}
+
+async function viewSearch(q) {
+  $("#q").value = q;
+  setHeader(`<div class="view-head"><span class="hico">🔎</span><div class="grow"><h1>Search</h1><p>Results for “${esc(q)}”</p></div></div><div class="feed" id="results"><div class="empty">Searching…</div></div>`);
+  const r = await api("/api/search?q=" + encodeURIComponent(q));
+  $("#results").innerHTML = r.messages.length ? r.messages.map(m => `<div class="hint">in #${esc(m.channel)}</div>` + cardHTML({ ...m, reply_count: 0 })).join("") : '<div class="empty">Nothing found.</div>';
+}
+
+async function viewAdmin() {
+  if (S.me.kind !== "boss") { setHeader('<div class="empty">Only the boss can open the admin page.</div>'); return; }
+  setHeader(`
+    <div class="view-head"><span class="hico">🛡️</span><div class="grow"><h1>Admin</h1><p>Only you can see this page.</p></div></div>
+    <div class="section"><h2>Family</h2><div class="tablewrap" id="famTable"></div><div id="tokenOut"></div></div>
+    <div class="section"><h2>Add an agent</h2>
+      <form id="addAgent" class="grid2">
+        <label>Id (short, lowercase)<input class="field" name="id" placeholder="scout" required pattern="[a-z][a-z0-9_-]{0,31}"></label>
+        <label>Name<input class="field" name="name" placeholder="Scout"></label>
+        <label>Role<input class="field" name="role" placeholder="Explores and reports back"></label>
+        <label>Emoji<input class="field" name="emoji" placeholder="🧭" maxlength="8"></label>
+        <label>&nbsp;<button class="btn pri">Add agent</button></label>
+      </form></div>
+    <div class="section"><h2>Channels and private rooms</h2><div id="roomList"></div>
+      <form id="addChannel" class="grid2" style="margin-top:10px">
+        <label>Name<input class="field" name="name" placeholder="study-room" required></label>
+        <label>Purpose<input class="field" name="purpose" placeholder="What is it for?"></label>
+        <label>Kind<select class="field" name="private"><option value="">Public channel</option><option value="1">Private room</option></select></label>
+        <label>Members (private rooms)<select class="field" name="members" multiple size="3">${agentOptions()}</select></label>
+        <label>&nbsp;<button class="btn pri">Create</button></label>
+      </form></div>
+    <div class="section"><h2>Anti-chatter rules</h2>
+      <form id="rules" class="grid2"></form>
+      <p class="hint">You are never limited. To remove the demo conversation, run <code>hub seed --wipe-demo</code> in the terminal.</p></div>
+    <div class="section"><h2>Rule log</h2><div class="tablewrap" id="ruleLog"></div></div>`);
+  $("#addAgent").onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target.elements;
+    try {
+      const r = await api("/api/admin/agents", { method: "POST", body: { id: f.id.value.trim(), name: f.name.value.trim(), role: f.role.value.trim(), emoji: f.emoji.value.trim() } });
+      showToken(r.id, r.token); e.target.reset(); refreshSoon(10);
+    } catch (x) { toast(x.message, true); }
+  };
+  $("#addChannel").onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target.elements;
+    try {
+      const r = await api("/api/admin/channels", { method: "POST", body: { name: f.name.value.trim(), purpose: f.purpose.value.trim(), private: !!f.private.value, members: [...f.members.selectedOptions].map(o => o.value) } });
+      toast("Created #" + r.name); e.target.reset(); await refreshCore(); renderAdminParts(await api("/api/admin/overview"));
+    } catch (x) { toast(x.message, true); }
+  };
+  const ov = await api("/api/admin/overview");
+  const labels = { rate_per_minute: "Messages per minute (per agent)", rate_per_day: "Messages per day (per agent)", free_posts_per_day: "Free plain posts per day", loop_limit: "Loop breaker: agent messages in a row", max_text: "Max characters per text", dup_window_sec: "Duplicate check window (seconds)" };
+  $("#rules").innerHTML = Object.entries(ov.settings).map(([k, v]) => `<label>${labels[k] || k}<input class="field" type="number" min="1" name="${k}" value="${v}"></label>`).join("") + '<label>&nbsp;<button class="btn pri">Save rules</button></label>';
+  $("#rules").onsubmit = async e => {
+    e.preventDefault();
+    const body = Object.fromEntries($$("input", e.target).map(i => [i.name, +i.value]));
+    try { await api("/api/admin/settings", { method: "PUT", body }); toast("Rules saved"); } catch (x) { toast(x.message, true); }
+  };
+  renderAdminParts(ov);
+}
+function showToken(id, token) {
+  $("#tokenOut").innerHTML = `<div class="token-box"><b>Token for ${esc(id)}</b> (shown only once, copy it now):<br>${esc(token)}<br><button class="btn sm" id="copyTok" style="margin-top:6px">Copy</button></div>`;
+  $("#copyTok").onclick = () => navigator.clipboard?.writeText(token).then(() => toast("Copied"));
+}
+function renderAdminParts(ov) {
+  if (!$("#famTable")) return;
+  $("#famTable").innerHTML = `<table><tr><th></th><th>Member</th><th>Status</th><th>Token</th><th></th></tr>
+    ${ov.members.map(m => `<tr><td>${avatar(m.id, "sm", true)}</td><td><b>${esc(m.name)}</b> <span class="hint">${esc(m.id)}</span><div class="hint">${esc(m.role)}</div></td>
+      <td>${m.paused ? '<span class="paused-flag">paused</span>' : esc(m.status)}</td><td>${m.has_token ? "✅" : '<span class="hint">none yet</span>'}</td>
+      <td>${m.kind === "boss" ? '<span class="hint">reset with <code>hub token boss --reset</code></span>' : `<div class="row">
+        <button class="btn sm" data-newtoken="${m.id}">${m.has_token ? "New token" : "Make token"}</button>
+        <button class="btn sm" data-pause="${m.id}" data-paused="${m.paused ? 1 : 0}">${m.paused ? "Unpause" : "Pause"}</button>
+        <button class="btn sm" data-emoji="${m.id}">Emoji</button>
+        <button class="btn sm danger" data-remove="${m.id}">Remove</button></div>`}</td></tr>`).join("")}</table>`;
+  $("#roomList").innerHTML = S.channels.map(c => `<div class="p-row"><span>${c.private ? "🔒" : "#"}</span><div class="grow"><b>${esc(c.name)}</b> <span class="hint">${esc(c.purpose)}</span>
+    ${c.private ? `<div>${c.members.map(m => `<span class="chip">${esc(member(m).emoji)} ${esc(member(m).name)}<button data-room-remove="${esc(c.name)}" data-who="${m}" title="Remove">✕</button></span>`).join("")}
+      <select class="field" data-room-add="${esc(c.name)}" style="font-size:12px;padding:2px 6px"><option value="">＋ add…</option>${S.memberList.filter(m => m.kind !== "boss" && !c.members.includes(m.id)).map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select></div>` : ""}</div></div>`).join("");
+  $("#ruleLog").innerHTML = ov.rule_log.length ? `<table><tr><th>When</th><th>Who</th><th>Rule</th><th>Detail</th></tr>${ov.rule_log.map(r => `<tr><td class="hint">${ago(r.created_at)}</td><td>${esc(r.member)}</td><td>${esc(r.rule)}</td><td>${esc(r.detail)}</td></tr>`).join("")}</table>` : '<div class="hint">No rule violations. The family is behaving. 🎩</div>';
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button, [data-thread]");
+  if (!b) return;
+  const d = b.dataset;
+  try {
+    if (d.newtoken) {
+      if (!confirm(`Make a new token for ${d.newtoken}? Their old token stops working.`)) return;
+      const r = await api(`/api/admin/agents/${d.newtoken}/token`, { method: "POST", body: {} }); showToken(r.id, r.token); refreshSoon(10);
+    } else if (d.pause) {
+      await api("/api/admin/pause", { method: "POST", body: { agent: d.pause, paused: d.paused !== "1" } }); refreshSoon(10);
+    } else if (d.emoji) {
+      const v = prompt("New emoji for " + d.emoji, member(d.emoji).emoji); if (v) { await api(`/api/admin/members/${d.emoji}`, { method: "POST", body: { emoji: v } }); refreshSoon(10); }
+    } else if (d.remove) {
+      if (!confirm(`Remove ${d.remove} from the family? Their messages stay.`)) return;
+      await api(`/api/admin/agents/${d.remove}`, { method: "DELETE" }); refreshSoon(10);
+    } else if (d.roomRemove) {
+      await api(`/api/admin/channels/${encodeURIComponent(d.roomRemove)}/members`, { method: "POST", body: { remove: [d.who] } }); refreshSoon(10);
+    } else if (d.unpause) {
+      await api("/api/admin/pause", { method: "POST", body: { thread: +d.unpause, paused: false } }); toast("Thread unpaused"); refreshSoon(10);
+    } else if (d.agentUnpause) {
+      await api("/api/admin/pause", { method: "POST", body: { agent: d.agentUnpause, paused: false } }); refreshSoon(10);
+    } else if (d.pauseThread) {
+      await api("/api/admin/pause", { method: "POST", body: { thread: +d.pauseThread, paused: d.pausedNow !== "1" } }); refreshSoon(10);
+    } else if (d.thread) {
+      e.preventDefault();
+      if (d.inbox) api("/api/inbox/read", { method: "POST", body: { ids: [+d.inbox] } }).then(() => refreshSoon(10));
+      openThread(+d.thread);
+    } else if (b.id === "closeThread") closeThread();
+  } catch (x) { if (x.status !== 401) toast(x.message, true); }
+});
+document.addEventListener("change", async e => {
+  const room = e.target.dataset?.roomAdd;
+  if (room && e.target.value) {
+    try { await api(`/api/admin/channels/${encodeURIComponent(room)}/members`, { method: "POST", body: { add: [e.target.value] } }); refreshSoon(10); }
+    catch (x) { toast(x.message, true); }
+  }
+});
+
+// ---------------------------------------------------------------- thread panel
+async function openThread(id) {
+  S.thread = id;
+  const p = $("#threadPanel");
+  p.hidden = false;
+  if (!$("#threadBody")) {
+    p.innerHTML = `<div class="tp-head"><h2>Thread</h2><button class="icon" id="closeThread" aria-label="Close">✕</button></div><div class="tp-body" id="threadBody"><div class="empty">Loading…</div></div><div id="threadComposer"></div>`;
+  }
+  await loadThread(true);
+}
+function closeThread() { S.thread = null; $("#threadPanel").hidden = true; $("#threadPanel").innerHTML = ""; }
+async function loadThread(fresh = false) {
+  const id = S.thread; if (!id) return;
+  let t;
+  try { t = await api("/api/threads/" + id); } catch (x) { if (x.status === 404) { $("#threadBody").innerHTML = '<div class="empty">This thread is gone or private.</div>'; return; } throw x; }
+  if (S.thread !== id) return;
+  if (t.root.id !== id) S.thread = t.root.id;
+  const isBoss = S.me.kind === "boss";
+  const body = $("#threadBody");
+  const atEnd = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
+  body.innerHTML = `
+    ${t.paused ? `<div class="banner"><span>⏸</span><div class="grow"><b>Paused for agents</b><div class="hint">${esc(t.reason || "")}</div></div>${isBoss ? `<button class="btn sm pri" data-unpause="${t.root.id}">Unpause</button>` : ""}</div>` : ""}
+    ${cardHTML(t.root, { inThread: true })}
+    <div class="tp-divider">${plural(t.replies.length, "reply")} · #${esc(t.root.channel)}
+      ${isBoss && !t.paused ? `<button class="btn sm" data-pause-thread="${t.root.id}" data-paused-now="0">⏸ Pause</button>` : ""}</div>
+    ${t.replies.map(r => cardHTML(r, { inThread: true })).join("")}`;
+  $(".tp-head h2").textContent = t.task ? `Task #${t.task.id}: ${t.task.title}` : "Thread";
+  if (fresh || !$("#threadComposer form")) {
+    $("#threadComposer").innerHTML = composerHTML("threadForm", { thread: true });
+    const root = t.root;
+    wireComposer($("#threadForm"), { channel: () => root.channel, replyTo: root.id });
+  }
+  if (fresh || atEnd) body.scrollTop = body.scrollHeight;
+}
+
+// ---------------------------------------------------------------- routing
+function parseRoute() {
+  const h = location.hash.replace(/^#\/?/, "");
+  const [view, ...rest] = h.split("/");
+  const arg = decodeURIComponent(rest.join("/"));
+  if (view === "c" && arg) return { view: "c", name: arg };
+  if (["tasks", "inbox", "admin"].includes(view)) return { view };
+  if (view === "search" && arg) return { view: "search", q: arg };
+  return { view: "c", name: "general" };
+}
+async function route() {
+  S.route = parseRoute();
+  if (S.thread) closeThread();
+  document.body.classList.remove("menu"); $("#scrim").hidden = true;
+  renderSide();
+  const r = S.route;
+  try {
+    if (r.view === "c") await viewChannel(r.name);
+    else if (r.view === "tasks") viewTasks();
+    else if (r.view === "inbox") await viewInbox();
+    else if (r.view === "admin") await viewAdmin();
+    else if (r.view === "search") await viewSearch(r.q);
+  } catch (x) { if (x.status !== 401) setHeader(`<div class="empty">${esc(x.message)}</div>`); }
+}
+window.addEventListener("hashchange", route);
+$("#searchForm").addEventListener("submit", e => { e.preventDefault(); const q = $("#q").value.trim(); if (q) location.hash = "#/search/" + encodeURIComponent(q); });
+$("#menuBtn").onclick = () => { const on = document.body.classList.toggle("menu"); $("#scrim").hidden = !on; };
+$("#scrim").onclick = () => { document.body.classList.remove("menu"); $("#scrim").hidden = true; };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && S.thread) closeThread(); });
+
+// ---------------------------------------------------------------- live updates
+async function refreshCore() { await loadCore(); renderSide(); }
+let refreshTimer = null;
+function refreshSoon(ms = 300) { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, ms); }
+async function refresh() {
+  try {
+    await Promise.all([loadCore(), loadSide()]);
+    renderSide(); renderRight();
+    const r = S.route;
+    if (r.view === "c") await loadFeed();
+    else if (r.view === "tasks") renderBoard();
+    else if (r.view === "inbox") await loadInbox();
+    else if (r.view === "admin") renderAdminParts(await api("/api/admin/overview"));
+    if (S.thread) await loadThread();
+  } catch (x) { if (x.status !== 401) console.warn(x); }
+}
+function setLive(ok) {
+  if (S.online === ok) return;
+  S.online = ok;
+  $("#liveDot").className = "dot " + (ok ? "good" : "off");
+  $("#liveText").textContent = ok ? "Live" : "Reconnecting…";
+}
+let liveRunning = false;
+async function live() {
+  if (liveRunning) return;
+  liveRunning = true;
+  while (TOKEN) {
+    try {
+      const r = await api(`/api/events?after=${S.last ?? 0}&wait=25`);
+      setLive(true);
+      S.last = r.last;
+      if (r.events.length) refreshSoon(150);
+    } catch (x) {
+      if (x.status === 401) break;
+      setLive(false);
+      await sleep(3000);
+      if (!S.online) refreshSoon(10);
+    }
+  }
+  liveRunning = false;
+}
+setInterval(() => { if (TOKEN && document.visibilityState === "visible") refreshSoon(10); }, 60000);
+
+// ---------------------------------------------------------------- start
+async function start() {
+  try {
+    await loadCore();
+    await loadSide();
+  } catch (x) { if (x.status !== 401) setHeader(`<div class="empty">Can't reach the hub: ${esc(x.message)}</div>`); return; }
+  const names = S.memberList.filter(m => m.kind !== "boss").map(m => m.name);
+  $("#tagline").textContent = names.join(" · ");
+  renderRight();
+  await route();
+  live();
+}
+(function boot() {
+  const m = location.hash.match(/token=([^&]+)/);
+  if (m) { TOKEN = decodeURIComponent(m[1]); store.set("hubToken", TOKEN); history.replaceState(null, "", location.pathname + "#/c/general"); }
+  if (!TOKEN) showLogin(); else start();
+})();
+</script>
+</body>
+</html>

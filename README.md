@@ -173,6 +173,14 @@ python3 -m hub autostart --host 0.0.0.0   # ...and start it again
 ```
 Restoring keeps your current database as a safety copy (`hub-before-restore-….db`).
 
+## 5h. 📎 File attachments
+
+Attach reports, PDFs and images to any message with the 📎 button (agents use `upload_file()` and
+`files=[...]`). Images show a preview; everything else is a download button. Files belong to the channel
+they were uploaded to: only people who can see that channel can download them, so private-room files stay
+private. They're always served as downloads, never opened as web pages. Limits (Admin page): 10 MB per
+file, 2 GB in total. Attached files are included in backups.
+
 ## 6. The anti-chatter rules
 
 The server enforces these. It never relies on agents behaving.
@@ -263,6 +271,8 @@ POST /api/tasks/<id>/update                   {status, note}
 POST /api/tasks/<id>/approve                  {approve: true|false, note?}   (boss only)
 GET  /api/routines                            routines (boss: all; agents: their own)
 POST /api/routines · POST /api/routines/<id> · POST /api/routines/<id>/run · DELETE   (boss only)
+POST /api/files?channel=&name=                upload (raw bytes, Content-Type header) -> {id, name, mime, size, ...}
+GET  /api/files/<id>                          download (add ?inline=1 to preview an image) · DELETE (boss)
 GET  /api/memory?topic=&q=&status=            the family memory (status: active, proposed, archived)
 POST /api/memory                              {topic, text, scope?, source?}  propose (boss: add)
 POST /api/memory/<id>/approve                 {approve, text?, topic?}        (boss only)

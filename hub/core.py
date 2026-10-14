@@ -19,6 +19,7 @@ from . import db, rules
 from .memory import MemoryMixin
 from .routines import RoutinesMixin
 from .backup import BackupMixin
+from .files import FilesMixin
 from .messages import TASK_STATUSES, ValidationError, parse_target, validate
 
 ONLINE_SEC = 120
@@ -58,7 +59,7 @@ def _loads(s):
     return json.loads(s) if s else {}
 
 
-class Hub(MemoryMixin, RoutinesMixin, BackupMixin):
+class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin):
     def __init__(self, home):
         self.home = Path(home).expanduser()
         self.home.mkdir(parents=True, exist_ok=True)
@@ -397,7 +398,8 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin):
                 "text": r["text"], "data": _loads(r["data"]), "reply_to": r["reply_to"],
                 "created_at": r["created_at"], "demo": bool(r["demo"]),
                 "local_only": r["channel"] in self.local_only_channels(),
-                "reactions": self.reaction_summary(r["id"])}
+                "reactions": self.reaction_summary(r["id"]),
+                "attachments": self.attachments(_loads(r["data"]).get("files") or [])}
 
     def reaction_summary(self, mid):
         rows = self.q("SELECT member, value FROM reactions WHERE message_id=?", (mid,))
@@ -555,6 +557,9 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin):
             # Task updates always live in the task's own thread.
             ch = self.channel(task["channel"])
             reply_to = task["message_id"]
+
+        if data.get("files"):
+            self.check_attachments(author, ch["name"], data["files"])
 
         if type_ == "review" and not (is_boss or author["id"] in REVIEWERS):
             raise HubError(403, "only Butler and the boss post reviews")

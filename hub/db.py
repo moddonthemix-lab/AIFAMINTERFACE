@@ -158,6 +158,18 @@ CREATE TABLE IF NOT EXISTS routines (
     demo        INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS files (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,              -- the uploader's file name (shown, never used on disk)
+    mime        TEXT NOT NULL,
+    size        INTEGER NOT NULL,
+    sha256      TEXT NOT NULL,
+    stored      TEXT NOT NULL,              -- hub-chosen name in <HUB_HOME>/files
+    uploader    TEXT NOT NULL,
+    channel     TEXT NOT NULL,
+    created_at  REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL

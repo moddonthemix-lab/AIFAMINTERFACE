@@ -100,6 +100,7 @@ def validate(type_, text, data, max_text=4000):
     if not isinstance(data, dict):
         raise ValidationError("'data' must be an object")
     brain = data.get("brain")
+    files = data.get("files")
     data = {k: v for k, v in data.items() if k in FIELDS[type_]}
     out = {}
 
@@ -161,6 +162,11 @@ def validate(type_, text, data, max_text=4000):
     # Optional on every type: which brain wrote it, "local" (Ollama) or "cloud".
     if brain is not None:
         out["brain"] = _choice(brain, "brain", BRAINS)
+    # Optional on every type: attached file ids (upload first with POST /api/files).
+    if files:
+        if not isinstance(files, list) or len(files) > 10:
+            raise ValidationError("'files' must be a list of at most 10 file ids")
+        out["files"] = list(dict.fromkeys(_int(f, "files") for f in files))
     if len(json.dumps(out)) > MAX_DATA_BYTES:
         raise ValidationError("the message data is too large")
     return text, out

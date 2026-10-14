@@ -86,8 +86,10 @@ class HubClient:
         except (urllib.error.URLError, OSError) as e:
             raise HubOffline(f"can't reach the hub at {self.url}: {e}") from None
 
-    def _send(self, channel, type_, text=None, data=None, reply_to=None):
+    def _send(self, channel, type_, text=None, data=None, reply_to=None, files=None):
         body = {"type": type_, "data": dict(data or {})}
+        if files:
+            body["data"]["files"] = [f["id"] if isinstance(f, dict) else int(f) for f in files]
         if self.brain:
             body["data"]["brain"] = self.brain
         if text is not None:
@@ -231,8 +233,8 @@ class HubClient:
         return self._req("GET", "/api/brief")
 
     # -- writing (one helper per message type)
-    def post(self, channel, text, reply_to=None):
-        return self._send(channel, "post", text, reply_to=reply_to)
+    def post(self, channel, text, reply_to=None, files=None):
+        return self._send(channel, "post", text, reply_to=reply_to, files=files)
 
     def ask(self, channel, text, to=None, reply_to=None):
         return self._send(channel, "question", text, {"to": to} if to else {}, reply_to)
@@ -250,14 +252,54 @@ class HubClient:
     def update_task(self, task_id, status, note=""):
         return self._write(f"/api/tasks/{int(task_id)}/update", {"status": status, "note": note})
 
-    def post_result(self, task_id, summary, artifacts=None):
-        # The hub files results under the task's own thread, whatever channel we name here.
-        return self._send("tasks", "result", data={"task_id": task_id, "summary": summary,
-                                                   "artifacts": artifacts or []})
+    def post_result(self, task_id, summary, artifacts=None, files=None, channel="tasks"):
+        """files: uploaded to the task's channel (see upload_file); results go into the task's thread."""
+        return self._send(channel, "result", data={"task_id": task_id, "summary": summary,
+                                                   "artifacts": artifacts or []}, files=files)
 
-    def post_finding(self, channel, claim, status, confidence, sources=None, reply_to=None):
+    def post_finding(self, channel, claim, status, confidence, sources=None, reply_to=None, files=None):
         return self._send(channel, "finding", data={"claim": claim, "status": status, "confidence": confidence,
-                                                    "sources": sources or []}, reply_to=reply_to)
+                                                    "sources": sources or []}, reply_to=reply_to, files=files)
+
+    # -- files
+    def upload_file(self, path, channel, name=None, mime=None):
+        """Upload a file to a channel; attach it with files=[result] on post / post_finding / post_result.
+        Uploads are not queued in the outbox: they need the hub to be reachable."""
+        import mimetypes
+        p = Path(path).expanduser()
+        name = name or p.name
+        mime = mime or mimetypes.guess_type(name)[0] or "application/octet-stream"
+        req = urllib.request.Request(
+            f"{self.url}/api/files?" + urllib.parse.urlencode({"channel": channel.lstrip("#"), "name": name}),
+            data=p.read_bytes(), method="POST")
+        req.add_header("Content-Type", mime)
+        if self.token:
+            req.add_header("Authorization", f"Bearer {self.token}")
+        try:
+            with urllib.request.urlopen(req, timeout=max(self.timeout, 120)) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            try:
+                err = json.loads(e.read())
+            except ValueError:
+                err = {"error": e.reason}
+            raise HubClientError(e.code, err.get("error", "error"), err.get("rule")) from None
+        except (urllib.error.URLError, OSError) as e:
+            raise HubOffline(f"can't reach the hub at {self.url}: {e}") from None
+
+    def download_file(self, file_id, dest):
+        """Save an attached file to `dest` (a file path). Returns the path."""
+        req = urllib.request.Request(f"{self.url}/api/files/{int(file_id)}")
+        if self.token:
+            req.add_header("Authorization", f"Bearer {self.token}")
+        try:
+            with urllib.request.urlopen(req, timeout=max(self.timeout, 120)) as r:
+                Path(dest).expanduser().write_bytes(r.read())
+        except urllib.error.HTTPError as e:
+            raise HubClientError(e.code, "could not download the file") from None
+        except (urllib.error.URLError, OSError) as e:
+            raise HubOffline(f"can't reach the hub at {self.url}: {e}") from None
+        return Path(dest).expanduser()
 
     def review(self, channel, target, verdict, text):
         return self._send(channel, "review", text, {"target": target, "verdict": verdict})

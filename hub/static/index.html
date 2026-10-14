@@ -114,6 +114,10 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .tag.type-task_request, .tag.type-task_update, .tag.type-result { background: color-mix(in srgb, var(--purple) 15%, transparent); color: var(--purple); }
 .tag.type-finding { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
 .tag.type-review { background: color-mix(in srgb, var(--gold) 18%, transparent); color: var(--gold); }
+.atts { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-top: 8px; }
+.att { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); font-size: 12.5px; max-width: 100%; }
+.att span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-img { display: block; max-width: min(320px, 100%); max-height: 240px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; background: var(--hover); min-width: 60px; min-height: 40px; }
 .react { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 1px 9px; font-size: 12.5px; color: var(--mut); }
 .react:hover { background: var(--hover); }
 .react.on { border-color: var(--acc); background: var(--soft); color: var(--ink); }
@@ -518,6 +522,7 @@ function cardHTML(m, { inThread = false } = {}) {
       break;
     }
   }
+  content += attachmentsHTML(m.attachments);
   const replies = m.reply_count || 0;
   return `<article class="card ${m.author === "boss" ? "mine" : ""}" data-id="${m.id}">
     ${avatar(m.author, inThread ? "sm" : "")}
@@ -537,6 +542,30 @@ function approveButtons(t, compact = false) {
     <button class="btn sm pri" data-approve="${t.id}">👍 Approve</button><button class="btn sm" data-decline="${t.id}">👎 Decline</button></div>`;
 }
 
+function fileSize(n) { return n < 1024 ? n + " B" : n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
+function attachmentsHTML(list) {
+  if (!list || !list.length) return "";
+  return `<div class="atts">${list.map(f => f.preview
+    ? `<img class="att-img" data-file-img="${f.id}" alt="${esc(f.name)}" title="${esc(f.name)}: click to download" data-download-file="${f.id}" data-name="${esc(f.name)}">`
+    : `<button class="att" data-download-file="${f.id}" data-name="${esc(f.name)}" title="Download">📄 <span>${esc(f.name)}</span> <small class="hint">${fileSize(f.size)}</small></button>`).join("")}</div>`;
+}
+const blobCache = {};
+async function loadImages() {
+  for (const img of $$("img[data-file-img]:not([src])")) {
+    const id = img.dataset.fileImg;
+    img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";  // blank while loading
+    try {
+      if (!blobCache[id]) {
+        const r = await fetch(`/api/files/${id}?inline=1`, { headers: { Authorization: "Bearer " + TOKEN } });
+        if (!r.ok) throw new Error();
+        blobCache[id] = URL.createObjectURL(await r.blob());
+      }
+      img.src = blobCache[id];
+    } catch { img.replaceWith(Object.assign(document.createElement("span"), { className: "hint", textContent: "🖼 " + img.alt + " (unavailable)" })); }
+  }
+}
+new MutationObserver(() => { if (document.querySelector("img[data-file-img]:not([src])")) loadImages(); }).observe(document.body, { childList: true, subtree: true });
+
 function reactHTML(m) {
   if (m.author === S.me.id || m.author === "hub") return "";
   const r = m.reactions || { up: 0, down: 0, boss: 0 }, mine = S.me.kind === "boss" ? r.boss : 0;
@@ -551,9 +580,11 @@ function composerHTML(id, { thread = false } = {}) {
   if (isBoss || S.me.id === "butler") types.push(["review", "🎩 Review"]);
   return `<form class="composer" id="${id}" autocomplete="off"><div class="inner">
     <div class="extra" data-extra></div>
+    <div class="atts" data-files hidden></div>
     <textarea name="text" placeholder="${thread ? "Reply in thread…" : "Write a message…"}" rows="2"></textarea>
     <div class="row">
       <select class="field" name="type" aria-label="Message type">${types.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
+      <label class="btn sm" title="Attach files">📎<input type="file" multiple hidden data-attach></label>
       <span class="err grow" data-err></span>
       <span class="hint only-desk">⌘/Ctrl + Enter</span>
       <button class="btn pri" type="submit">Send</button>
@@ -585,6 +616,30 @@ function wireComposer(form, { channel, replyTo } = {}) {
   };
   type.addEventListener("change", setType);
   setType();
+  let files = [];
+  const drawFiles = () => {
+    const box = $("[data-files]", form);
+    box.hidden = !files.length;
+    box.innerHTML = files.map((f, i) => `<span class="att">📎 <span>${esc(f.name)}</span><button type="button" class="react" data-unattach="${i}">✕</button></span>`).join("");
+  };
+  $("[data-files]", form).addEventListener("click", e => {
+    const b = e.target.closest("[data-unattach]"); if (!b) return;
+    e.stopPropagation(); files.splice(+b.dataset.unattach, 1); drawFiles();
+  });
+  $("[data-attach]", form).addEventListener("change", async e => {
+    const err = $("[data-err]", form);
+    for (const file of e.target.files) {
+      err.textContent = "Uploading " + file.name + "…";
+      try {
+        const r = await fetch(`/api/files?channel=${encodeURIComponent(channel())}&name=${encodeURIComponent(file.name)}`, {
+          method: "POST", headers: { Authorization: "Bearer " + TOKEN, "Content-Type": file.type || "application/octet-stream" }, body: file });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || "upload failed");
+        files.push(j); err.textContent = "";
+      } catch (x) { err.textContent = file.name + ": " + x.message; }
+    }
+    e.target.value = ""; drawFiles();
+  });
   text.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) form.requestSubmit(); });
   form.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && e.target !== text) form.requestSubmit(); });
   form.addEventListener("submit", async e => {
@@ -596,11 +651,12 @@ function wireComposer(form, { channel, replyTo } = {}) {
     if (t === "task_request") body.data = { title: f.title.value, details: f.details.value, assignee: f.assignee.value, priority: f.priority.value, due: f.due.value || undefined };
     if (t === "finding") body.data = { claim: text.value, status: f.fstatus.value, confidence: Math.min(100, Math.max(0, +f.confidence.value || 0)) / 100, sources: f.sources.value.split("\n").map(s => s.trim()).filter(Boolean) };
     if (t === "review") body.data = { target: f.target.value.trim(), verdict: f.verdict.value };
+    if (files.length) body.data.files = files.map(x => x.id);
     const btn = $("button[type=submit]", form);
     btn.disabled = true; err.textContent = "";
     try {
       await api(`/api/channels/${encodeURIComponent(channel())}/messages`, { method: "POST", body });
-      form.reset(); setType();
+      form.reset(); setType(); files = []; drawFiles();
       refreshSoon(50);
     } catch (x) { err.textContent = x.message; }
     finally { btn.disabled = false; }
@@ -956,7 +1012,7 @@ async function viewAdmin() {
     } catch (x) { toast(x.message, true); }
   };
   const ov = await api("/api/admin/overview");
-  const labels = { rate_per_minute: "Messages per minute (per agent)", rate_per_day: "Messages per day (per agent)", free_posts_per_day: "Free plain posts per day", loop_limit: "Loop breaker: agent messages in a row", max_text: "Max characters per text", dup_window_sec: "Duplicate check window (seconds)" };
+  const labels = { rate_per_minute: "Messages per minute (per agent)", rate_per_day: "Messages per day (per agent)", free_posts_per_day: "Free plain posts per day", loop_limit: "Loop breaker: agent messages in a row", max_text: "Max characters per text", dup_window_sec: "Duplicate check window (seconds)", max_file_mb: "Largest attachment (MB)", max_storage_mb: "All attachments together (MB)" };
   $("#rules").innerHTML = Object.entries(ov.settings).map(([k, v]) => `<label>${labels[k] || k}<input class="field" type="number" min="1" name="${k}" value="${v}"></label>`).join("") + '<label>&nbsp;<button class="btn pri">Save rules</button></label>';
   $("#rules").onsubmit = async e => {
     e.preventDefault();
@@ -1003,7 +1059,7 @@ function renderAdminParts(ov) {
   $("#ruleLog").innerHTML = ov.rule_log.length ? `<table><tr><th>When</th><th>Who</th><th>Rule</th><th>Detail</th></tr>${ov.rule_log.map(r => `<tr><td class="hint">${ago(r.created_at)}</td><td>${esc(r.member)}</td><td>${esc(r.rule)}</td><td>${esc(r.detail)}</td></tr>`).join("")}</table>` : '<div class="hint">No rule violations. The family is behaving. 🎩</div>';
 }
 document.addEventListener("click", async e => {
-  const b = e.target.closest("button, [data-thread], [data-goto]");
+  const b = e.target.closest("button, [data-thread], [data-goto], [data-download-file]");
   if (!b) return;
   const d = b.dataset;
   try {
@@ -1019,6 +1075,8 @@ document.addEventListener("click", async e => {
       await api(`/api/admin/agents/${d.remove}`, { method: "DELETE" }); refreshSoon(10);
     } else if (d.roomRemove) {
       await api(`/api/admin/channels/${encodeURIComponent(d.roomRemove)}/members`, { method: "POST", body: { remove: [d.who] } }); refreshSoon(10);
+    } else if (d.downloadFile) {
+      await downloadAuthed(`/api/files/${d.downloadFile}`, d.name || "file");
     } else if (d.downloadBackup) {
       await downloadAuthed(`/api/admin/backups/${encodeURIComponent(d.downloadBackup)}`, d.downloadBackup);
     } else if (d.routineRun) {

@@ -24,7 +24,7 @@ SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
 }
 PAGE_CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
-            "img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+            "img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 ROUTES = []
 
@@ -160,6 +160,35 @@ def post_routine_edit(h, me, q, body, rid):
 @route("DELETE", r"/api/routines/(?P<rid>\d+)", auth="boss")
 def delete_routine(h, me, q, body, rid):
     h.hub.delete_routine(int(rid))
+    return {"ok": True}
+
+
+def raw_body(fn):
+    """Mark a route that receives the request body as raw bytes (file uploads)."""
+    fn.raw_body = True
+    return fn
+
+
+@route("POST", "/api/files")
+@raw_body
+def post_file(h, me, q, body):
+    return h.hub.upload_file(me, q.get("channel") or "general", q.get("name") or h.headers.get("X-Filename"),
+                             h.headers.get("Content-Type"), body)
+
+
+@route("GET", r"/api/files/(?P<fid>\d+)")
+def get_file(h, me, q, body, fid):
+    from urllib.parse import quote
+    meta, data = h.hub.read_file(me, int(fid))
+    inline = q.get("inline") == "1" and meta["preview"]
+    headers = {"Content-Security-Policy": "default-src 'none'; sandbox",
+               "Content-Disposition": f"{'inline' if inline else 'attachment'}; filename*=UTF-8''{quote(meta['name'])}"}
+    return Raw(data, meta["mime"] if inline else "application/octet-stream", headers)
+
+
+@route("DELETE", r"/api/files/(?P<fid>\d+)", auth="boss")
+def delete_file(h, me, q, body, fid):
+    h.hub.delete_file(int(fid))
     return {"ok": True}
 
 
@@ -393,7 +422,10 @@ class Handler(BaseHTTPRequestHandler):
                         raise HubError(401, "missing or wrong token. Send 'Authorization: Bearer <your token>'.")
                     if auth == "boss" and me["kind"] != "boss":
                         raise HubError(403, "only the boss can do this")
-                body = self._body() if method in ("POST", "PUT") else {}
+                if getattr(fn, "raw_body", False):
+                    body = self._raw(self.hub.settings["max_file_mb"] * 1024 * 1024)
+                else:
+                    body = self._body() if method in ("POST", "PUT") else {}
                 result = fn(self, me, query, body, **match.groupdict())
                 if isinstance(result, Raw):
                     return self._send(200, result.body, result.ctype, result.headers)
@@ -414,6 +446,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, {"error": "something went wrong inside the hub; see the terminal"})
             except OSError:
                 pass
+
+    def _raw(self, limit):
+        length = int(self.headers.get("Content-Length") or 0)
+        if length > limit:
+            raise HubError(413, f"the file is too large (at most {limit // (1024 * 1024)} MB)")
+        return self.rfile.read(length) if length else b""
 
     def _body(self):
         length = int(self.headers.get("Content-Length") or 0)

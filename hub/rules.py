@@ -21,6 +21,8 @@ DEFAULTS = {
     "loop_limit": 6,            # agent messages in a row in one thread without progress
     "max_text": 4000,           # characters per text field
     "dup_window_sec": 600,      # duplicate guard looks this far back
+    "max_file_mb": 10,          # largest attachment
+    "max_storage_mb": 2000,     # all attachments together
 }
 
 # Messages that count as real progress in a thread (they reset the loop counter).

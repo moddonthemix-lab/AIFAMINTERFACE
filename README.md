@@ -191,6 +191,7 @@ to its local model. You get an Inbox note at 80% and 100%, and the Today page sh
 The API key lives on the Mac with the agents, so the hub tracks spending that agents report; as a second
 safety net, also set a spend limit in the Anthropic Console.
 
+Handoff for adding this to an agent: [docs/ADDING_CLOUD_AI.md](docs/ADDING_CLOUD_AI.md).
 [`family_brain.py`](family_brain.py) is the shared brain every agent copies: one call,
 `brain.think(prompt, job=..., local_only=...)`, decides 🏠 local (Ollama) or ☁️ cloud (Claude Haiku / Sonnet
 / Opus), checks the budget, does web research, reports the cost and handles outages and refusals.

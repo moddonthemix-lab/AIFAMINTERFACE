@@ -97,6 +97,17 @@ def cmd_tasks(args):
     return 0
 
 
+def cmd_approve(args):
+    hub, _ = open_hub()
+    try:
+        msg = hub.decide_task(hub.member("boss"), args.task_id, not args.decline, args.note or "")
+    except HubError as e:
+        print(e.message)
+        return 1
+    print(f"Task {args.task_id} is now {msg['task']['status']}.")
+    return 0
+
+
 def cmd_doctor(args):
     config.load_dotenv()
     ok = True
@@ -236,6 +247,12 @@ def main(argv=None):
     s.add_argument("--assignee")
     s.add_argument("--status", help="e.g. open,in_progress")
     s.set_defaults(fn=cmd_tasks)
+
+    s = sub.add_parser("approve", help="approve (or --decline) a proposed task")
+    s.add_argument("task_id", type=int)
+    s.add_argument("--decline", action="store_true")
+    s.add_argument("--note")
+    s.set_defaults(fn=cmd_approve)
 
     s = sub.add_parser("doctor", help="check the setup")
     s.set_defaults(fn=cmd_doctor)

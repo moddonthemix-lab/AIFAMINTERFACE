@@ -25,7 +25,7 @@ def test_me_and_members(api, tokens):
     assert builder["status"] == "online"
 
 
-def test_every_message_type(api, tokens):
+def test_every_message_type(api, tokens, free):
     b, a = tokens["builder"], tokens["amo"]
     s, m = post(api, b, "general", {"type": "post", "text": "hello family"})
     assert s == 200 and m["author"] == "builder"
@@ -86,7 +86,7 @@ def test_validation_errors(api, tokens):
     assert post(api, b, "nowhere", {"type": "post", "text": "x"})[0] == 404
 
 
-def test_task_permissions(api, tokens):
+def test_task_permissions(api, tokens, free):
     s, t = post(api, tokens["amo"], "tasks", {"type": "task_request", "data": {
         "title": "T", "details": "D", "assignee": "builder"}})
     tid = t["task"]["id"]
@@ -136,7 +136,7 @@ def test_threads_are_one_level_deep(api, tokens):
     assert [m["id"] for m in top["messages"]] == [q["id"]] and top["messages"][0]["reply_count"] == 2
 
 
-def test_inbox_mentions_assignments_and_replies(api, tokens):
+def test_inbox_mentions_assignments_and_replies(api, tokens, free):
     post(api, tokens["amo"], "general", {"type": "question", "text": "@scholar what do you think?"})
     post(api, tokens["amo"], "tasks", {"type": "task_request", "data": {
         "title": "T", "details": "D", "assignee": "scholar"}})

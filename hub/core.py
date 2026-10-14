@@ -24,6 +24,13 @@ MENTION_RE = re.compile(r"(?<![\w@])@([a-z][a-z0-9_-]{0,39})", re.I)
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 CHANNEL_RE = re.compile(r"^[a-z0-9][a-z0-9+_-]{0,39}$")
 REVIEWERS = ("butler",)
+ACTIVE = ("open", "accepted", "in_progress", "blocked")
+# How freely an agent may start tasks without the boss approving them first.
+AUTONOMY = {
+    "ask": "Tasks it starts on its own wait for your approval; steps of a job you gave it start right away.",
+    "free": "Starts tasks without asking.",
+    "strict": "Everything it starts waits for your approval, even steps of a job.",
+}
 
 
 class HubError(Exception):
@@ -161,6 +168,7 @@ class Hub:
             "id": m["id"], "name": m["name"], "role": m["role"], "emoji": m["emoji"], "kind": m["kind"],
             "card_url": m["card_url"], "status": self.presence(m["last_seen"], now),
             "last_seen": m["last_seen"], "paused": bool(m["paused"]), "has_token": bool(m["token_hash"]),
+            "task_autonomy": m["task_autonomy"],
         }
 
     def members(self):
@@ -188,7 +196,9 @@ class Hub:
     def update_member(self, member_id, **fields):
         if self.member(member_id) is None:
             raise HubError(404, f"no member '{member_id}'")
-        allowed = {"name": 60, "role": 200, "emoji": 8, "card_url": 300}
+        allowed = {"name": 60, "role": 200, "emoji": 8, "card_url": 300, "task_autonomy": 10}
+        if fields.get("task_autonomy") is not None and fields["task_autonomy"] not in AUTONOMY:
+            raise HubError(400, f"task_autonomy must be one of: {', '.join(AUTONOMY)}")
         with self.tx() as c:
             for k, v in fields.items():
                 if k in allowed and v is not None:
@@ -500,6 +510,8 @@ class Hub:
                 raise HubError(403, "only the boss can reopen a task")
             if task["status"] in ("done", "declined") and not is_boss:
                 raise HubError(409, f"task {task['id']} is already {task['status']}")
+            if task["status"] == "proposed" and not is_boss:
+                raise HubError(409, f"task {task['id']} is waiting for the boss's approval")
             # Task updates always live in the task's own thread.
             ch = self.channel(task["channel"])
             reply_to = task["message_id"]
@@ -524,6 +536,12 @@ class Hub:
                 raise HubError(400, f"no member '{data['assignee']}' to assign the task to")
             if not self.can_see(assignee, ch):
                 raise HubError(400, f"@{assignee['id']} is not in #{ch['name']}, so they can't see this task")
+            parent = None
+            if data.get("parent_task") is not None:
+                parent = self._task(data["parent_task"])
+                if parent is None or not self.can_see(author, self.channel(parent["channel"])):
+                    raise HubError(404, f"no task {data['parent_task']}")
+            needs_ok = self.needs_approval(author, parent)
 
         if type_ == "question" and data.get("to") and self.member(data["to"]) is None:
             raise HubError(400, f"no member '{data['to']}'")
@@ -567,15 +585,26 @@ class Hub:
                     tc = c.execute(
                         "INSERT INTO tasks(title, details, requester, assignee, status, priority, due, channel, "
                         "message_id, created_at, updated_at, demo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                        (data["title"], data["details"], author["id"], data["assignee"], "open", data["priority"],
+                        (data["title"], data["details"], author["id"], data["assignee"],
+                         "proposed" if needs_ok else "open", data["priority"],
                          data.get("due"), ch["name"], msg["id"], ts, ts, int(demo)))
                     msg["task_id"] = tc.lastrowid
-                    tell(data["assignee"], "assignment", tc.lastrowid)
+                    if needs_ok:
+                        # The assignee hears about it only once the boss approves.
+                        notify[data["assignee"]] = None
+                        tell("boss", "approval", tc.lastrowid, f"{author['name']} proposes a task for {assignee['name']}")
+                    else:
+                        tell(data["assignee"], "assignment", tc.lastrowid)
                     self._event(c, "task", self.task_dict(self._task(tc.lastrowid)), channel=ch["name"])
                 elif task is not None:
                     status = "done" if type_ == "result" else data["status"]
                     c.execute("UPDATE tasks SET status=?, updated_at=?, result_message_id=COALESCE(?, result_message_id) "
                               "WHERE id=?", (status, ts, msg["id"] if type_ == "result" else None, task["id"]))
+                    if task["status"] == "proposed" and status not in ("proposed", "declined"):
+                        tell(task["assignee"], "assignment", task["id"], "approved by the boss")
+                        c.execute("UPDATE inbox SET read=1 WHERE kind='approval' AND task_id=?", (task["id"],))
+                    elif task["status"] == "proposed":
+                        c.execute("UPDATE inbox SET read=1 WHERE kind='approval' AND task_id=?", (task["id"],))
                     tell(task["requester"], "task", task["id"], f"task {task['id']} → {status}")
                     self._event(c, "task", self.task_dict(self._task(task["id"])), channel=ch["name"])
 
@@ -592,7 +621,10 @@ class Hub:
                     if reply_to is not None and int(reply_to) != root["id"]:
                         tell(self.message(int(reply_to))["author"], "reply")
 
-                for mid, (kind, task_id, note) in notify.items():
+                for mid, reason in notify.items():
+                    if reason is None:
+                        continue
+                    kind, task_id, note = reason
                     m = self.member(mid)
                     if m is not None and self.can_see(m, ch):
                         self._inbox(c, mid, kind, msg["id"], task_id, note, demo)
@@ -716,6 +748,27 @@ class Hub:
             (t["message_id"],))]
         return d
 
+    def needs_approval(self, author, parent=None):
+        """Does a task this member starts have to wait for the boss's OK?"""
+        if author["kind"] == "boss":
+            return False
+        mode = author["task_autonomy"] or "ask"
+        if mode == "free":
+            return False
+        if mode == "strict":
+            return True
+        # "ask": a step of a job this agent is already doing starts right away.
+        return not (parent is not None and parent["assignee"] == author["id"] and parent["status"] in ACTIVE)
+
+    def decide_task(self, boss, tid, approve, note=""):
+        t = self._task(tid)
+        if t is None:
+            raise HubError(404, f"no task {tid}")
+        if t["status"] != "proposed":
+            raise HubError(409, f"task {tid} is not waiting for approval (it is {t['status']})")
+        note = note or ("Approved by the boss." if approve else "Declined by the boss.")
+        return self.update_task(boss, tid, "open" if approve else "declined", note)
+
     def update_task(self, member, tid, status, note="", client_id=None):
         t = self._task(tid)
         if t is None:
@@ -773,13 +826,15 @@ class Hub:
         """A tiny summary for ESP32 screens. Always under 1 KB."""
         names = self.visible_channel_names(member)
         if member["kind"] == "boss":
-            open_n = self.q1("SELECT COUNT(*) FROM tasks WHERE status NOT IN ('done','declined')")[0]
+            open_n = self.q1("SELECT COUNT(*) FROM tasks WHERE status NOT IN ('done','declined','proposed')")[0]
         else:
-            open_n = self.q1("SELECT COUNT(*) FROM tasks WHERE assignee=? AND status NOT IN ('done','declined')",
+            open_n = self.q1("SELECT COUNT(*) FROM tasks WHERE assignee=? AND status NOT IN ('done','declined','proposed')",
                              (member["id"],))[0]
         out = {
             "me": member["id"],
             "unread": self.unread_count(member),
+            "approve": self.q1("SELECT COUNT(*) FROM tasks WHERE status='proposed'")[0]
+            if member["kind"] == "boss" else 0,
             "open": open_n,
             "blocked": self.q1("SELECT COUNT(*) FROM tasks WHERE status='blocked'")[0],
             "paused": self.q1("SELECT COUNT(*) FROM threads WHERE paused=1")[0],

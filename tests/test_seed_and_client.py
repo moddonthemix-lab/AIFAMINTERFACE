@@ -9,7 +9,10 @@ def test_demo_seed_and_wipe(hub):
     assert seed.demo(hub) is False  # only once
     tasks = hub.tasks(hub.member("boss"))
     assert {t["title"] for t in tasks} == {"Test local file-sharing permissions",
-                                           "Verify the Pro Tools workflow constraints"}
+                                           "Verify the Pro Tools workflow constraints",
+                                           "Price a session-backup service for small studios"}
+    assert [t["status"] for t in tasks if t["title"].startswith("Price")] == ["proposed"]
+    assert any(i["kind"] == "approval" for i in hub.inbox(hub.member("boss")))
     assert any(t["status"] == "done" for t in tasks)
     reviews = hub.q("SELECT * FROM messages WHERE type='review'")
     assert reviews[0]["author"] == "butler"
@@ -19,7 +22,7 @@ def test_demo_seed_and_wipe(hub):
     assert hub.tasks(hub.member("boss")) == []
 
 
-def test_client_end_to_end(server, tokens):
+def test_client_end_to_end(server, tokens, free):
     amo = HubClient(tokens["amo"], server)
     builder = HubClient(tokens["builder"], server)
     assert builder.me()["member"]["id"] == "builder"

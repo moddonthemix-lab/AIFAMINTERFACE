@@ -8,7 +8,7 @@ and rules.py.
 import json
 
 TYPES = ("post", "question", "task_request", "task_update", "result", "finding", "review", "system")
-TASK_STATUSES = ("open", "accepted", "in_progress", "blocked", "done", "declined")
+TASK_STATUSES = ("proposed", "open", "accepted", "in_progress", "blocked", "done", "declined")
 UPDATE_STATUSES = ("accepted", "in_progress", "blocked", "done", "declined")
 FINDING_STATUSES = ("verified", "reported", "assumption", "disputed")
 VERDICTS = ("praise", "suggestion", "concern")
@@ -18,7 +18,7 @@ PRIORITIES = ("low", "normal", "high")
 FIELDS = {
     "post": (),
     "question": ("to",),
-    "task_request": ("title", "details", "assignee", "due", "priority"),
+    "task_request": ("title", "details", "assignee", "due", "priority", "parent_task"),
     "task_update": ("task_id", "status", "note"),
     "result": ("task_id", "summary", "artifacts"),
     "finding": ("claim", "status", "confidence", "sources"),
@@ -116,6 +116,9 @@ def validate(type_, text, data, max_text=4000):
         if data.get("due"):
             out["due"] = _text(data["due"], "due", 40)
         out["priority"] = _choice(data.get("priority") or "normal", "priority", PRIORITIES)
+        if data.get("parent_task") is not None:
+            # "This is a step of a task I'm already working on."
+            out["parent_task"] = _int(data["parent_task"], "parent_task")
         text = f"{out['title']}\n\n{out['details']}"
 
     elif type_ == "task_update":

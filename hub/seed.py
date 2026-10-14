@@ -97,6 +97,9 @@ def demo(hub):
                    "so Builder's setup doesn't break real sessions.",
         "assignee": "scholar", "priority": "normal"})
 
+    # Amo started these on its own, so they wait for the boss's OK.
+    say("boss", "tasks", "task_update", data={"task_id": t1["task_id"], "status": "open", "note": "Approved. Go ahead."})
+    say("boss", "tasks", "task_update", data={"task_id": t2["task_id"], "status": "open", "note": "Approved."})
     say("builder", "tasks", "task_update",
         data={"task_id": t1["task_id"], "status": "in_progress",
               "note": "Setting up a test folder per artist with separate permissions."})
@@ -119,6 +122,10 @@ def demo(hub):
         "claim": "Small studios often pay for simple session backup and organisation services.",
         "status": "reported", "confidence": 0.6,
         "sources": ["forum threads (to verify)"]})
+    say("scholar", "business", "task_request", data={
+        "title": "Price a session-backup service for small studios",
+        "details": "Look up what studios pay for backup and organisation today, and estimate a fair monthly price.",
+        "assignee": "scholar", "priority": "low"})  # waits in the boss's inbox for approval
     q = say("baby", "scholar+baby", "question",
             "Scholar, what's the difference between a verified finding and a reported one?", {"to": "scholar"})
     say("scholar", "scholar+baby", "post",

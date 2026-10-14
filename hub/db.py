@@ -136,6 +136,7 @@ def connect(path):
 MIGRATIONS = [
     ("channels", "local_only", "INTEGER NOT NULL DEFAULT 0"),   # 1 = agents must not send it to cloud AI
     ("messages", "client_id", "TEXT"),                          # sender's id for safe re-sending
+    ("members", "task_autonomy", "TEXT NOT NULL DEFAULT 'ask'"),  # ask | free | strict (see core.AUTONOMY)
 ]
 
 

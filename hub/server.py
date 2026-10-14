@@ -107,6 +107,11 @@ def post_task_update(h, me, q, body, tid):
     return h.hub.update_task(me, int(tid), body.get("status"), body.get("note") or "", body.get("client_id"))
 
 
+@route("POST", r"/api/tasks/(?P<tid>\d+)/approve", auth="boss")
+def post_task_approve(h, me, q, body, tid):
+    return h.hub.decide_task(me, int(tid), bool(body.get("approve", True)), body.get("note") or "")
+
+
 @route("GET", "/api/inbox")
 def get_inbox(h, me, q, body):
     return {"items": h.hub.inbox(me, unread_only=q.get("unread") == "1"), "unread": h.hub.unread_count(me)}
@@ -181,7 +186,7 @@ def admin_token(h, me, q, body, mid):
 
 @route("POST", r"/api/admin/members/(?P<mid>[^/]+)", auth="boss")
 def admin_update_member(h, me, q, body, mid):
-    h.hub.update_member(mid, **{k: body.get(k) for k in ("name", "role", "emoji", "card_url")})
+    h.hub.update_member(mid, **{k: body.get(k) for k in ("name", "role", "emoji", "card_url", "task_autonomy")})
     return {"ok": True}
 
 

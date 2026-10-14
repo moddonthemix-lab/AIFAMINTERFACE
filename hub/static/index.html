@@ -128,6 +128,7 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .box ul { margin: 6px 0 0; padding-left: 18px; }
 .box li { overflow-wrap: anywhere; }
 .status { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.s-proposed { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
 .s-open, .s-accepted { background: color-mix(in srgb, var(--acc) 14%, transparent); color: var(--acc); }
 .s-in_progress { background: color-mix(in srgb, var(--purple) 16%, transparent); color: var(--purple); }
 .s-blocked, .s-declined { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
@@ -187,7 +188,7 @@ textarea.field { width: 100%; resize: vertical; }
 .tp-body + .composer { position: static; background: var(--bg); padding: 10px 16px 14px; }
 
 /* ---------- tasks board ---------- */
-.board { flex: 1; display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 12px; padding: 4px 22px 22px; overflow-x: auto; align-items: start; }
+.board { flex: 1; display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; padding: 4px 22px 22px; overflow-x: auto; align-items: start; }
 .col { background: color-mix(in srgb, var(--ink) 3%, transparent); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; min-height: 160px; }
 .col.over { border-color: var(--acc); background: var(--soft); }
 .col h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); display: flex; justify-content: space-between; margin: 2px 4px 10px; }
@@ -245,7 +246,7 @@ tr:last-child td { border-bottom: 0; }
   .pills, .feed, .list { padding-left: 16px; padding-right: 16px; }
   .section { margin-left: 16px; margin-right: 16px; }
   .composer { padding-left: 12px; padding-right: 12px; }
-  .board { grid-template-columns: repeat(4, minmax(240px, 85vw)); padding: 4px 16px 16px; scroll-snap-type: x mandatory; }
+  .board { grid-template-columns: repeat(5, minmax(240px, 85vw)); padding: 4px 16px 16px; scroll-snap-type: x mandatory; }
   .col { scroll-snap-align: start; }
   .card { padding: 12px; gap: 10px; }
   .av { width: 34px; height: 34px; font-size: 17px; }
@@ -299,10 +300,11 @@ const store = {
 
 const COLORS = { amo: "#2f6fed", scholar: "#1f9d55", builder: "#8b5cf6", baby: "#f08c2e", butler: "#64748b", boss: "#d4a017", hub: "#888" };
 const TYPE_LABEL = { post: "Post", question: "Question", task_request: "Task", task_update: "Task update", result: "Result", finding: "Finding", review: "Review", system: "System" };
-const STATUS_LABEL = { open: "Open", accepted: "Accepted", in_progress: "In progress", blocked: "Blocked", done: "Done", declined: "Declined" };
+const STATUS_LABEL = { proposed: "Needs your OK", open: "Open", accepted: "Accepted", in_progress: "In progress", blocked: "Blocked", done: "Done", declined: "Declined" };
 const FINDING_LABEL = { verified: "Verified", reported: "Reported", assumption: "Assumption", disputed: "Disputed" };
 const VERDICT_LABEL = { praise: "👏 Praise", suggestion: "💡 Suggestion", concern: "⚠️ Concern" };
-const INBOX_LABEL = { mention: "Mention", assignment: "New task", reply: "Reply", task: "Task update", review: "Review", needs_boss: "Needs you" };
+const AUTONOMY = { ask: "Ask me for its own ideas", free: "Free: starts tasks itself", strict: "Strict: always ask me" };
+const INBOX_LABEL = { approval: "Needs approval", mention: "Mention", assignment: "New task", reply: "Reply", task: "Task update", review: "Review", needs_boss: "Needs you" };
 const FILTERS = [["all", "All"], ["question", "Questions"], ["task", "Tasks"], ["finding", "Findings"], ["review", "Reviews"], ["post", "Posts"]];
 
 let TOKEN = store.get("hubToken");
@@ -472,7 +474,8 @@ function cardHTML(m, { inThread = false } = {}) {
         ${d.priority && d.priority !== "normal" ? `<span class="prio-${d.priority}">${d.priority} priority</span>` : ""}</div>
         <h3>${esc(d.title)}</h3><div class="txt">${fmt(d.details)}</div>
         <div class="sub" style="margin-top:6px">Assigned to ${avatar(d.assignee, "xs")} <b>${esc(member(d.assignee).name)}</b>${d.due ? " · due " + esc(d.due) : ""}</div>
-        ${t.result ? `<div class="box result-box">✅ <b>Result:</b> ${fmt(t.result.summary)}</div>` : ""}</div>`;
+        ${t.result ? `<div class="box result-box">✅ <b>Result:</b> ${fmt(t.result.summary)}</div>` : ""}
+        ${approveButtons(t)}</div>`;
       break;
     }
     case "task_update": {
@@ -509,6 +512,12 @@ function cardHTML(m, { inThread = false } = {}) {
       ${inThread ? "" : `<div class="foot"><span class="tag type-${m.type}">${TYPE_LABEL[m.type]}</span>${m.demo ? '<span class="tag">demo</span>' : ""}${m.paused ? '<span class="paused-flag">⏸ paused, needs you</span>' : ""}
         <button class="replies ${replies ? "has" : ""}" data-thread="${m.id}">💬 ${replies ? plural(replies, "reply") : "Reply"}</button></div>`}
     </div></article>`;
+}
+
+function approveButtons(t, compact = false) {
+  if (t.status !== "proposed" || S.me.kind !== "boss") return "";
+  return `<div class="row" style="margin-top:8px">${compact ? "" : `<span class="hint grow">${esc(member(t.requester).name)} started this on its own. Approve it?</span>`}
+    <button class="btn sm pri" data-approve="${t.id}">👍 Approve</button><button class="btn sm" data-decline="${t.id}">👎 Decline</button></div>`;
 }
 
 // ---------------------------------------------------------------- composer
@@ -625,7 +634,7 @@ function viewTasks() {
   $("#taskWho").onchange = e => { S.route.who = e.target.value; renderBoard(); };
   renderBoard();
 }
-const COLUMNS = [["open", "Open", ["open", "accepted"]], ["in_progress", "In progress", ["in_progress"]], ["blocked", "Blocked", ["blocked"]], ["done", "Done", ["done", "declined"]]];
+const COLUMNS = [["proposed", "Proposed", ["proposed"]], ["open", "Open", ["open", "accepted"]], ["in_progress", "In progress", ["in_progress"]], ["blocked", "Blocked", ["blocked"]], ["done", "Done", ["done", "declined"]]];
 function renderBoard() {
   const board = $("#board"); if (!board) return;
   const who = S.route.who;
@@ -638,8 +647,8 @@ function renderBoard() {
         <h3>${esc(t.title)}</h3>
         <div class="row">${avatar(t.assignee, "xs")}<span class="grow">${esc(member(t.assignee).name)} · from ${esc(member(t.requester).name)}</span><span>${ago(t.updated_at)}</span></div>
         ${t.result ? `<div class="hint" style="margin-top:4px">✅ ${esc(t.result.summary.slice(0, 120))}</div>` : ""}
-        <div class="row" style="margin-top:6px"><button class="btn sm" data-thread="${t.message_id}">Open</button><span class="grow"></span>
-          <select class="field" data-move="${t.id}" aria-label="Move task"><option value="">Move to…</option>${COLUMNS.filter(c => c[0] !== key).map(c => `<option value="${c[0]}">${c[1]}</option>`).join("")}</select></div>
+        ${t.status === "proposed" ? approveButtons(t, true) : `<div class="row" style="margin-top:6px"><button class="btn sm" data-thread="${t.message_id}">Open</button><span class="grow"></span>
+          <select class="field" data-move="${t.id}" aria-label="Move task"><option value="">Move to…</option>${COLUMNS.filter(c => c[0] !== key && c[0] !== "proposed").map(c => `<option value="${c[0]}">${c[1]}</option>`).join("")}</select></div>`}
       </div>`).join("") || '<div class="hint" style="padding:6px">Nothing here.</div>'}</div>`;
   }).join("");
 }
@@ -656,7 +665,7 @@ document.addEventListener("drop", e => {
   const col = e.target.closest?.(".col"); if (!col) return;
   e.preventDefault(); $$(".col").forEach(c => c.classList.remove("over"));
   const id = +e.dataTransfer.getData("text/plain"), t = taskById(id);
-  if (t && !COLUMNS.find(c => c[0] === col.dataset.col)[2].includes(t.status)) moveTask(id, col.dataset.col);
+  if (t && col.dataset.col !== "proposed" && !COLUMNS.find(c => c[0] === col.dataset.col)[2].includes(t.status)) moveTask(id, col.dataset.col);
 });
 document.addEventListener("change", e => { if (e.target.dataset.move && e.target.value) moveTask(+e.target.dataset.move, e.target.value); });
 
@@ -673,7 +682,11 @@ async function loadInbox() {
   const [inbox, ov] = await Promise.all([api("/api/inbox"), isBoss ? api("/api/admin/overview") : Promise.resolve(null)]);
   if (S.route.view !== "inbox") return;
   const paused = ov ? ov.paused_threads : [], pausedAgents = ov ? ov.members.filter(m => m.paused) : [];
-  $("#needs").innerHTML = paused.length || pausedAgents.length ? `<div class="section"><h2>⏸ Waiting for you</h2>
+  const proposals = isBoss ? S.tasks.filter(t => t.status === "proposed") : [];
+  $("#needs").innerHTML = paused.length || pausedAgents.length || proposals.length ? `<div class="section"><h2>⏳ Waiting for you</h2>
+    ${proposals.map(t => `<div class="banner" style="margin-bottom:8px">${avatar(t.requester, "sm")}<div class="grow"><b>${esc(member(t.requester).name)} proposes: ${esc(t.title)}</b>
+      <div class="hint">for ${esc(member(t.assignee).name)} · #${esc(t.channel)}</div><div class="snip">${esc(t.details.slice(0, 160))}</div></div>
+      <button class="btn sm" data-thread="${t.message_id}">Open</button><button class="btn sm pri" data-approve="${t.id}">👍 Approve</button><button class="btn sm" data-decline="${t.id}">👎</button></div>`).join("")}
     ${paused.map(p => `<div class="banner" style="margin-bottom:8px"><div class="grow"><b>Paused thread in #${esc(p.root.channel)}</b><div class="hint">${esc(p.reason || "")}</div><div class="snip">${esc(p.root.text.slice(0, 140))}</div></div>
       <button class="btn sm" data-thread="${p.root.id}">Open</button><button class="btn sm pri" data-unpause="${p.root.id}">Unpause</button></div>`).join("")}
     ${pausedAgents.map(m => `<div class="banner" style="margin-bottom:8px"><div class="grow"><b>${esc(m.emoji)} ${esc(m.name)} is paused</b></div><button class="btn sm pri" data-agent-unpause="${m.id}">Unpause</button></div>`).join("")}</div>` : "";
@@ -699,6 +712,7 @@ async function viewAdmin() {
   setHeader(`
     <div class="view-head"><span class="hico">🛡️</span><div class="grow"><h1>Admin</h1><p>Only you can see this page.</p></div></div>
     <div class="section"><h2>Family</h2><div class="tablewrap" id="famTable"></div><div id="tokenOut"></div></div>
+    <p class="hint" style="margin:0 22px 16px">Task freedom: <b>Ask me</b> = tasks an agent thinks up itself wait for your 👍; steps of a job you gave it start right away. <b>Free</b> = starts tasks itself. <b>Strict</b> = everything waits for you.</p>
     <div class="section"><h2>Add an agent</h2>
       <form id="addAgent" class="grid2">
         <label>Id (short, lowercase)<input class="field" name="id" placeholder="scout" required pattern="[a-z][a-z0-9_-]{0,31}"></label>
@@ -759,6 +773,7 @@ function renderAdminParts(ov) {
         <button class="btn sm" data-newtoken="${m.id}">${m.has_token ? "New token" : "Make token"}</button>
         <button class="btn sm" data-pause="${m.id}" data-paused="${m.paused ? 1 : 0}">${m.paused ? "Unpause" : "Pause"}</button>
         <button class="btn sm" data-emoji="${m.id}">Emoji</button>
+        <select class="field" data-autonomy="${m.id}" title="Can it start tasks without asking you?" style="font-size:12px;padding:3px 6px">${Object.entries(AUTONOMY).map(([k, l]) => `<option value="${k}" ${m.task_autonomy === k ? "selected" : ""}>${l}</option>`).join("")}</select>
         <button class="btn sm danger" data-remove="${m.id}">Remove</button></div>`}</td></tr>`).join("")}</table>`;
   $("#roomList").innerHTML = '<p class="hint">🏠 Local AI only: agents must keep that channel on local models and never send it to a cloud AI service. ☁️ Cloud allowed: agents may use cloud AI when online.</p>' +
     S.channels.map(c => `<div class="p-row"><span>${c.private ? "🔒" : "#"}</span><div class="grow"><b>${esc(c.name)}</b> <span class="hint">${esc(c.purpose)}</span>
@@ -784,6 +799,10 @@ document.addEventListener("click", async e => {
       await api(`/api/admin/agents/${d.remove}`, { method: "DELETE" }); refreshSoon(10);
     } else if (d.roomRemove) {
       await api(`/api/admin/channels/${encodeURIComponent(d.roomRemove)}/members`, { method: "POST", body: { remove: [d.who] } }); refreshSoon(10);
+    } else if (d.approve || d.decline) {
+      const id = +(d.approve || d.decline);
+      await api(`/api/tasks/${id}/approve`, { method: "POST", body: { approve: !!d.approve } });
+      toast(d.approve ? "Approved 👍" : "Declined"); refreshSoon(10);
     } else if (d.localToggle) {
       await api(`/api/admin/channels/${encodeURIComponent(d.localToggle)}`, { method: "POST", body: { local_only: d.localNow !== "1" } });
       await refreshCore(); renderAdminParts(await api("/api/admin/overview"));
@@ -801,6 +820,12 @@ document.addEventListener("click", async e => {
   } catch (x) { if (x.status !== 401) toast(x.message, true); }
 });
 document.addEventListener("change", async e => {
+  const who = e.target.dataset?.autonomy;
+  if (who) {
+    try { await api(`/api/admin/members/${who}`, { method: "POST", body: { task_autonomy: e.target.value } }); toast("Saved"); }
+    catch (x) { toast(x.message, true); }
+    return;
+  }
   const room = e.target.dataset?.roomAdd;
   if (room && e.target.value) {
     try { await api(`/api/admin/channels/${encodeURIComponent(room)}/members`, { method: "POST", body: { add: [e.target.value] } }); refreshSoon(10); }

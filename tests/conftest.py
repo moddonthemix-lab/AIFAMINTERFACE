@@ -24,6 +24,13 @@ def hub(tmp_path):
 
 
 @pytest.fixture
+def free(hub):
+    """Let every agent start tasks without approval (for tests about other features)."""
+    for a in AGENTS:
+        hub.update_member(a, task_autonomy="free")
+
+
+@pytest.fixture
 def tokens(hub):
     t = {a: hub.reset_token(a) for a in AGENTS}
     t["boss"] = hub.read_boss_token()

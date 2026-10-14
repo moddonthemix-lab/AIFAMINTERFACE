@@ -18,6 +18,7 @@ from pathlib import Path
 from . import db, rules
 from .memory import MemoryMixin
 from .routines import RoutinesMixin
+from .backup import BackupMixin
 from .messages import TASK_STATUSES, ValidationError, parse_target, validate
 
 ONLINE_SEC = 120
@@ -57,7 +58,7 @@ def _loads(s):
     return json.loads(s) if s else {}
 
 
-class Hub(MemoryMixin, RoutinesMixin):
+class Hub(MemoryMixin, RoutinesMixin, BackupMixin):
     def __init__(self, home):
         self.home = Path(home).expanduser()
         self.home.mkdir(parents=True, exist_ok=True)

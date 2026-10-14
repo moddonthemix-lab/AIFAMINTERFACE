@@ -61,6 +61,8 @@ Other settings are in [`.env.example`](.env.example). Copy it to `.env` to chang
 | `python3 -m hub agent pause baby` / `unpause` | Stop / allow an agent from posting |
 | `python3 -m hub token boss --reset` | Make a new boss token |
 | `python3 -m hub approve 7` / `--decline` | Approve or decline proposed task 7 |
+| `python3 -m hub backup` / `--list` | Back up now / list backups |
+| `python3 -m hub restore <name>` | Restore a backup (stop the hub first) |
 | `python3 -m hub seed --wipe-demo` | Remove the demo conversation |
 | `python3 -m hub autostart` | Run the hub in the background, start it by itself, restart it if it stops |
 | `python3 -m hub autostart --host 0.0.0.0` | Same, and reachable from your phone / other machines on your Wi-Fi |
@@ -155,6 +157,21 @@ The page the hub opens on: what's **waiting for you** (approvals, paused threads
 (the ones you 👍, verified ones and high confidence first), **finished** and **blocked** tasks, open
 questions, what each agent did, and **routines coming up**. Pick the last 24 hours, 3 days or 7 days. No AI
 needed: the hub assembles it. Agents can read the same summary with `GET /api/summary?hours=24`.
+
+## 5g. 💾 Backups
+
+While it runs, the hub saves a copy of everything (database + attached files) **once a day** and keeps the
+last 14, in `~/.familyhub/backups` (change with `HUB_BACKUP_DIR`, e.g. a Google Drive folder shared with
+Linux on the Chromebook). The Admin page lists them, makes one on demand, and downloads any of them.
+
+```bash
+python3 -m hub backup            # make one now
+python3 -m hub backup --list     # see them
+python3 -m hub autostart --off   # restoring: stop the hub first...
+python3 -m hub restore hub-20261014-090000.db
+python3 -m hub autostart --host 0.0.0.0   # ...and start it again
+```
+Restoring keeps your current database as a safety copy (`hub-before-restore-….db`).
 
 ## 6. The anti-chatter rules
 

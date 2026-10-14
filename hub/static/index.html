@@ -928,7 +928,17 @@ async function viewAdmin() {
     <div class="section"><h2>Anti-chatter rules</h2>
       <form id="rules" class="grid2"></form>
       <p class="hint">You are never limited. To remove the demo conversation, run <code>hub seed --wipe-demo</code> in the terminal.</p></div>
+    <div class="section"><h2>💾 Backups</h2>
+      <p class="hint">The hub saves a copy of everything once a day and keeps the last 14. To restore one, stop the hub and run
+      <code>python3 -m hub restore &lt;name&gt;</code> on the hub machine.</p>
+      <div class="row" style="margin-bottom:8px"><button class="btn pri" id="backupNow">Back up now</button><span class="hint" id="backupFolder"></span></div>
+      <div class="tablewrap" id="backupList"></div></div>
     <div class="section"><h2>Rule log</h2><div class="tablewrap" id="ruleLog"></div></div>`);
+  $("#backupNow").onclick = async () => {
+    try { const b = await api("/api/admin/backups", { method: "POST", body: {} }); toast("Saved " + b.name); loadBackups(); }
+    catch (x) { toast(x.message, true); }
+  };
+  loadBackups();
   $("#addAgent").onsubmit = async e => {
     e.preventDefault();
     const f = e.target.elements;
@@ -954,6 +964,21 @@ async function viewAdmin() {
     try { await api("/api/admin/settings", { method: "PUT", body }); toast("Rules saved"); } catch (x) { toast(x.message, true); }
   };
   renderAdminParts(ov);
+}
+async function loadBackups() {
+  if (!$("#backupList")) return;
+  const r = await api("/api/admin/backups");
+  $("#backupFolder").textContent = "Saved in " + r.folder;
+  $("#backupList").innerHTML = r.backups.length ? `<table><tr><th>Backup</th><th>When</th><th>Size</th><th></th></tr>
+    ${r.backups.map(b => `<tr><td><code>${esc(b.name)}</code></td><td class="hint">${ago(b.created_at)}</td><td class="hint">${b.size_kb} KB</td>
+      <td><button class="btn sm" data-download-backup="${esc(b.name)}">⬇ Download</button></td></tr>`).join("")}</table>`
+    : '<div class="hint">No backups yet. The first one is made automatically, or click "Back up now".</div>';
+}
+async function downloadAuthed(url, name) {
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + TOKEN } });
+  if (!r.ok) { toast("Download failed", true); return; }
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(await r.blob()), download: name });
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 function showToken(id, token) {
   $("#tokenOut").innerHTML = `<div class="token-box"><b>Token for ${esc(id)}</b> (shown only once, copy it now):<br>${esc(token)}<br><button class="btn sm" id="copyTok" style="margin-top:6px">Copy</button></div>`;
@@ -994,6 +1019,8 @@ document.addEventListener("click", async e => {
       await api(`/api/admin/agents/${d.remove}`, { method: "DELETE" }); refreshSoon(10);
     } else if (d.roomRemove) {
       await api(`/api/admin/channels/${encodeURIComponent(d.roomRemove)}/members`, { method: "POST", body: { remove: [d.who] } }); refreshSoon(10);
+    } else if (d.downloadBackup) {
+      await downloadAuthed(`/api/admin/backups/${encodeURIComponent(d.downloadBackup)}`, d.downloadBackup);
     } else if (d.routineRun) {
       await api(`/api/routines/${d.routineRun}/run`, { method: "POST", body: {} }); toast("Task created"); refreshSoon(10);
     } else if (d.routineToggle) {

@@ -110,6 +110,49 @@ def cmd_approve(args):
     return 0
 
 
+def _hub_running(port):
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=2) as r:
+            return bool(json.loads(r.read()).get("ok"))
+    except OSError:
+        return False
+
+
+def cmd_backup(args):
+    hub, _ = open_hub()
+    if args.list:
+        backups = hub.backups()
+        print(f"Backups in {hub.backup_dir()}:" if backups else f"No backups yet in {hub.backup_dir()}.")
+        for b in backups:
+            print(f"  {b['name']}  {b['size_kb']} KB")
+        return 0
+    b = hub.backup()
+    print(f"Saved {hub.backup_dir() / b['name']} ({b['size_kb']} KB).")
+    return 0
+
+
+def cmd_restore(args):
+    from . import backup
+    config.load_dotenv()
+    if _hub_running(config.port()):
+        print("The hub is running. Stop it first, restore, then start it again:\n"
+              "  python3 -m hub autostart --off\n"
+              f"  python3 -m hub restore {args.file}\n"
+              "  python3 -m hub autostart --host 0.0.0.0\n"
+              "(If you started it with `hub serve` instead, press Ctrl+C there.)")
+        return 1
+    path = args.file
+    if "/" not in path:
+        path = str(Hub(config.home()).backup_dir() / path)
+    try:
+        safety = backup.restore(config.home(), path)
+    except Exception as e:  # noqa: BLE001
+        print(f"Could not restore: {e}")
+        return 1
+    print(f"Restored {path}.\nYour previous database was kept as {safety}.\nNow start the hub again.")
+    return 0
+
+
 def cmd_doctor(args):
     config.load_dotenv()
     ok = True
@@ -140,6 +183,10 @@ def cmd_doctor(args):
         missing = [m["id"] for m in hub.members() if m["kind"] == "agent" and not m["has_token"]]
         check("All agents have tokens", not missing,
               f"no token yet for {', '.join(missing)} (fine until you connect them): hub agent token <id>", warn=True)
+        age = hub.last_backup_age()
+        check("Backups" + (f": last one {age / 3600:.0f} h ago in {hub.backup_dir()}" if age is not None else ""),
+              age is not None and age < 2 * 86400,
+              "none recent; the hub makes one daily while running, or run: python3 -m hub backup", warn=True)
         size = len(hub.brief(hub.member("boss")))
         check(f"/api/brief is {size} bytes (must be under 1024)", size < 1024)
     except Exception as e:  # noqa: BLE001
@@ -255,6 +302,14 @@ def main(argv=None):
     s.add_argument("--decline", action="store_true")
     s.add_argument("--note")
     s.set_defaults(fn=cmd_approve)
+
+    s = sub.add_parser("backup", help="back up the hub now (or --list backups)")
+    s.add_argument("--list", action="store_true")
+    s.set_defaults(fn=cmd_backup)
+
+    s = sub.add_parser("restore", help="restore a backup (stop the hub first)")
+    s.add_argument("file", help="a backup name from `backup --list`, or a path")
+    s.set_defaults(fn=cmd_restore)
 
     s = sub.add_parser("doctor", help="check the setup")
     s.set_defaults(fn=cmd_doctor)

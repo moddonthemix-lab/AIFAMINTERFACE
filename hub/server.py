@@ -29,6 +29,13 @@ PAGE_CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-i
 ROUTES = []
 
 
+class Raw:
+    """A non-JSON response (a file download)."""
+
+    def __init__(self, body, ctype, headers=None):
+        self.body, self.ctype, self.headers = body, ctype, headers or {}
+
+
 def route(method, pattern, auth="member"):
     """Register a handler. auth: None (public), "member" (any token) or "boss"."""
     def wrap(fn):
@@ -243,6 +250,22 @@ def admin_overview(h, me, q, body):
             "paused_threads": h.hub.paused_threads(), "members": h.hub.members()}
 
 
+@route("GET", "/api/admin/backups", auth="boss")
+def admin_backups(h, me, q, body):
+    return {"backups": h.hub.backups(), "folder": str(h.hub.backup_dir())}
+
+
+@route("POST", "/api/admin/backups", auth="boss")
+def admin_backup_now(h, me, q, body):
+    return h.hub.backup()
+
+
+@route("GET", r"/api/admin/backups/(?P<name>[^/]+)", auth="boss")
+def admin_backup_download(h, me, q, body, name):
+    path = h.hub.backup_path(name)
+    return Raw(path.read_bytes(), "application/octet-stream", {"Content-Disposition": f'attachment; filename="{name}"'})
+
+
 @route("PUT", "/api/admin/settings", auth="boss")
 def admin_settings(h, me, q, body):
     return {"settings": h.hub.update_settings(body)}
@@ -372,6 +395,8 @@ class Handler(BaseHTTPRequestHandler):
                         raise HubError(403, "only the boss can do this")
                 body = self._body() if method in ("POST", "PUT") else {}
                 result = fn(self, me, query, body, **match.groupdict())
+                if isinstance(result, Raw):
+                    return self._send(200, result.body, result.ctype, result.headers)
                 return self._send(200, result)
             if any(rx.match(path) for _, rx, _, _ in ROUTES):
                 raise HubError(405, f"{method} is not allowed here")

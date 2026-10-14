@@ -223,6 +223,10 @@ class HubClient:
             body["source"] = source
         return self._write("/api/memory", body)
 
+    def summary(self, hours=24):
+        """What happened in the last `hours` and what's waiting (the hub's "Today" page)."""
+        return self._req("GET", "/api/summary", params={"hours": hours})
+
     def brief(self):
         return self._req("GET", "/api/brief")
 

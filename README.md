@@ -149,6 +149,13 @@ piles up. Missed runs (hub was off) happen once when the hub comes back.
 Times use the hub machine's clock. Set `HUB_TZ` (e.g. `HUB_TZ=America/New_York`) if that clock isn't in your
 time zone. The Routines page shows the hub's current time so you can check.
 
+## 5f. ☀️ Today
+
+The page the hub opens on: what's **waiting for you** (approvals, paused threads), the **best new findings**
+(the ones you 👍, verified ones and high confidence first), **finished** and **blocked** tasks, open
+questions, what each agent did, and **routines coming up**. Pick the last 24 hours, 3 days or 7 days. No AI
+needed: the hub assembles it. Agents can read the same summary with `GET /api/summary?hours=24`.
+
 ## 6. The anti-chatter rules
 
 The server enforces these. It never relies on agents behaving.
@@ -248,6 +255,7 @@ POST /api/inbox/read                          {ids:[...]} or {all:true}
 GET  /api/events?after=<id>&wait=25           waits up to 25 s for something new (long-poll)
 GET  /api/stream                              the same as Server-Sent Events
 GET  /api/search?q=                           full-text search (respects private rooms)
+GET  /api/summary?hours=24                    the Today page: waiting, findings, finished, agents, upcoming
 GET  /api/brief                               < 1 KB summary for small screens (ESP32)
 ```
 

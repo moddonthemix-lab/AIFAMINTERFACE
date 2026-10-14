@@ -903,6 +903,57 @@ class Hub(MemoryMixin, RoutinesMixin):
             for c in out["ch"]:
                 c["t"] = c["t"][:width]
 
+    def summary(self, member, hours=24):
+        """What happened in the last `hours`, and what's waiting: the "Today" page. No AI involved."""
+        hours = max(1, min(int(hours), 24 * 31))
+        since = time.time() - hours * 3600
+        names = self.visible_channel_names(member)
+        marks = ",".join("?" * len(names)) or "''"
+        is_boss = member["kind"] == "boss"
+
+        def msgs(where, args=(), limit=50):
+            rows = self.q(f"SELECT * FROM messages WHERE channel IN ({marks}) AND created_at>? AND {where} "
+                          f"ORDER BY id DESC LIMIT ?", list(names) + [since, *args, limit])
+            return [self.msg_dict(r) for r in rows]
+
+        findings = msgs("type='finding'")
+        rank = {"verified": 3, "reported": 2, "assumption": 1, "disputed": 0}
+        findings.sort(key=lambda m: (m["reactions"]["boss"], rank.get(m["data"].get("status"), 0),
+                                     m["data"].get("confidence", 0)), reverse=True)
+        tasks = self.tasks(member)
+        done = [t for t in tasks if t["status"] == "done" and t["updated_at"] > since]
+        new = [t for t in tasks if t["created_at"] > since]
+        active = {}
+        for r in self.q(f"SELECT author, type, COUNT(*) n FROM messages WHERE channel IN ({marks}) AND created_at>? "
+                        f"AND author NOT IN ('hub','boss') GROUP BY author, type", list(names) + [since]):
+            a = active.setdefault(r["author"], {"messages": 0, "findings": 0, "results": 0})
+            a["messages"] += r["n"]
+            a["findings"] += r["n"] if r["type"] == "finding" else 0
+            a["results"] += r["n"] if r["type"] == "result" else 0
+        loved = [m for m in msgs("id IN (SELECT message_id FROM reactions WHERE member='boss' AND value>0)")]
+        waiting = {
+            "approve_tasks": [t for t in tasks if t["status"] == "proposed"] if is_boss else [],
+            "approve_memories": self.memories(member, status="proposed") if is_boss else [],
+            "paused_threads": self.paused_threads() if is_boss else [],
+            "blocked": [t for t in tasks if t["status"] == "blocked"],
+        }
+        upcoming = [r for r in self.routines(member) if r["enabled"] and r["next_run"]
+                    and r["next_run"] < time.time() + 86400]
+        upcoming.sort(key=lambda r: r["next_run"])
+        return {
+            "since": since, "hours": hours,
+            "waiting": waiting,
+            "findings": findings[:20],
+            "done": done[:20],
+            "new_tasks": new[:20],
+            "agents": active,
+            "loved": loved[:10],
+            "questions": msgs("type='question'", limit=10),
+            "upcoming": upcoming[:10],
+            "counts": {"findings": len(findings), "done": len(done), "new_tasks": len(new),
+                       "messages": sum(a["messages"] for a in active.values())},
+        }
+
     def stats(self):
         try:
             import resource

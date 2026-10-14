@@ -213,6 +213,11 @@ def get_search(h, me, q, body):
     return {"messages": h.hub.search(me, q.get("q", ""), limit=_int(q, "limit", 30))}
 
 
+@route("GET", "/api/summary")
+def get_summary(h, me, q, body):
+    return h.hub.summary(me, _int(q, "hours", 24))
+
+
 @route("GET", "/api/brief")
 def get_brief(h, me, q, body):
     return h.hub.brief(me)  # already compact JSON bytes

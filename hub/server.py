@@ -126,6 +126,36 @@ def get_feedback(h, me, q, body):
     return {"feedback": h.hub.feedback(me, _int(q, "limit", 100))}
 
 
+@route("GET", "/api/routines")
+def get_routines(h, me, q, body):
+    from .routines import now_dt, tz
+    zone = tz()
+    return {"routines": h.hub.routines(me), "hub_time": now_dt().strftime("%a %H:%M"),
+            "time_zone": str(zone) if zone else "the hub's clock"}
+
+
+@route("POST", "/api/routines", auth="boss")
+def post_routine(h, me, q, body):
+    return h.hub.create_routine(body)
+
+
+@route("POST", r"/api/routines/(?P<rid>\d+)/run", auth="boss")
+def post_routine_run(h, me, q, body, rid):
+    task = h.hub.run_routine(int(rid), force=True)
+    return {"task": task}
+
+
+@route("POST", r"/api/routines/(?P<rid>\d+)", auth="boss")
+def post_routine_edit(h, me, q, body, rid):
+    return h.hub.update_routine(int(rid), body)
+
+
+@route("DELETE", r"/api/routines/(?P<rid>\d+)", auth="boss")
+def delete_routine(h, me, q, body, rid):
+    h.hub.delete_routine(int(rid))
+    return {"ok": True}
+
+
 @route("GET", "/api/memory")
 def get_memory(h, me, q, body):
     from .memory import TOPICS

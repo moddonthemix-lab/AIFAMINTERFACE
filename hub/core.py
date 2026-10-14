@@ -17,6 +17,7 @@ from pathlib import Path
 
 from . import db, rules
 from .memory import MemoryMixin
+from .routines import RoutinesMixin
 from .messages import TASK_STATUSES, ValidationError, parse_target, validate
 
 ONLINE_SEC = 120
@@ -56,7 +57,7 @@ def _loads(s):
     return json.loads(s) if s else {}
 
 
-class Hub(MemoryMixin):
+class Hub(MemoryMixin, RoutinesMixin):
     def __init__(self, home):
         self.home = Path(home).expanduser()
         self.home.mkdir(parents=True, exist_ok=True)
@@ -514,7 +515,7 @@ class Hub(MemoryMixin):
         return [self.msg_dict(r) for r in rows]
 
     def post_message(self, author, channel_name, type_, text=None, data=None, reply_to=None,
-                     *, enforce=True, demo=False, created_at=None, client_id=None):
+                     *, enforce=True, demo=False, created_at=None, client_id=None, routine_id=None):
         """Store a message after checking its shape, permissions and the anti-chatter rules.
 
         `author` is the members row of whoever is posting (set from their token,
@@ -622,10 +623,10 @@ class Hub(MemoryMixin):
                 if type_ == "task_request":
                     tc = c.execute(
                         "INSERT INTO tasks(title, details, requester, assignee, status, priority, due, channel, "
-                        "message_id, created_at, updated_at, demo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "message_id, created_at, updated_at, demo, routine_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (data["title"], data["details"], author["id"], data["assignee"],
                          "proposed" if needs_ok else "open", data["priority"],
-                         data.get("due"), ch["name"], msg["id"], ts, ts, int(demo)))
+                         data.get("due"), ch["name"], msg["id"], ts, ts, int(demo), routine_id))
                     msg["task_id"] = tc.lastrowid
                     if needs_ok:
                         # The assignee hears about it only once the boss approves.
@@ -752,6 +753,7 @@ class Hub(MemoryMixin):
         d = {k: t[k] for k in ("id", "title", "details", "requester", "assignee", "status", "priority", "due",
                                "channel", "message_id", "result_message_id", "created_at", "updated_at")}
         d["demo"] = bool(t["demo"])
+        d["routine_id"] = t["routine_id"]
         if t["result_message_id"]:
             r = self.message(t["result_message_id"])
             if r is not None:

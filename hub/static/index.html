@@ -418,6 +418,7 @@ function renderSide() {
     ${navItem("#/tasks", "📋", "Tasks board", r.view === "tasks", open)}
     ${navItem("#/inbox", "📥", "Inbox", r.view === "inbox", S.unread, S.unread > 0)}
     ${navItem("#/memory", "🧠", "Family memory", r.view === "memory", (S.memPending || []).length, (S.memPending || []).length > 0)}
+    ${isBoss ? navItem("#/routines", "🔁", "Routines", r.view === "routines") : ""}
     ${isBoss ? navItem("#/admin", "🛡️", "Admin", r.view === "admin") : ""}
     <div class="side-h">Channels</div>${pub.map(chItem).join("")}
     ${priv.length ? `<div class="side-h">Private rooms</div>${priv.map(chItem).join("")}` : ""}
@@ -476,7 +477,7 @@ function cardHTML(m, { inThread = false } = {}) {
     case "question": content = `<div class="txt">${d.to ? `<span class="hint">❓ for ${esc(member(d.to).name)}</span><br>` : ""}${fmt(m.text)}</div>`; break;
     case "task_request": {
       const t = taskByMessage(m.id) || { status: "open", id: m.task_id };
-      content = `<div class="box"><div class="row"><span class="status s-${t.status}">${STATUS_LABEL[t.status]}</span><span class="sub">Task #${t.id ?? "?"}</span>
+      content = `<div class="box"><div class="row"><span class="status s-${t.status}">${STATUS_LABEL[t.status]}</span><span class="sub">Task #${t.id ?? "?"}${t.routine_id ? " · 🔁 routine" : ""}</span>
         ${d.priority && d.priority !== "normal" ? `<span class="prio-${d.priority}">${d.priority} priority</span>` : ""}</div>
         <h3>${esc(d.title)}</h3><div class="txt">${fmt(d.details)}</div>
         <div class="sub" style="margin-top:6px">Assigned to ${avatar(d.assignee, "xs")} <b>${esc(member(d.assignee).name)}</b>${d.due ? " · due " + esc(d.due) : ""}</div>
@@ -658,7 +659,7 @@ function renderBoard() {
     const list = tasks.filter(t => sts.includes(t.status));
     return `<div class="col" data-col="${key}"><h2><span>${label}</span><span>${list.length}</span></h2>
       ${list.map(t => `<div class="tcard" draggable="true" data-task="${t.id}">
-        <div class="row"><span class="status s-${t.status}">${STATUS_LABEL[t.status]}</span><span>#${t.id}</span>${t.priority !== "normal" ? `<span class="prio-${t.priority}">${t.priority}</span>` : ""}</div>
+        <div class="row"><span class="status s-${t.status}">${STATUS_LABEL[t.status]}</span><span>#${t.id}${t.routine_id ? " 🔁" : ""}</span>${t.priority !== "normal" ? `<span class="prio-${t.priority}">${t.priority}</span>` : ""}</div>
         <h3>${esc(t.title)}</h3>
         <div class="row">${avatar(t.assignee, "xs")}<span class="grow">${esc(member(t.assignee).name)} · from ${esc(member(t.requester).name)}</span><span>${ago(t.updated_at)}</span></div>
         ${t.result ? `<div class="hint" style="margin-top:4px">✅ ${esc(t.result.summary.slice(0, 120))}</div>` : ""}
@@ -783,6 +784,62 @@ async function loadMemory() {
     : `<div class="empty">${archived ? "Nothing archived." : "Nothing remembered here yet."}</div>`;
 }
 
+// ---------------------------------------------------------------- routines
+const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+async function viewRoutines() {
+  setHeader(`
+    <div class="view-head"><span class="hico">🔁</span><div class="grow"><h1>Routines</h1>
+      <p>Repeating tasks the hub hands out by itself. If the last one isn't finished yet, that turn is skipped, so work never piles up.</p></div></div>
+    <div class="list" id="routineList"><div class="empty">Loading…</div></div>
+    <div class="section"><h2>New routine</h2><form id="routineAdd" class="grid2">
+      <label style="grid-column:1/-1">Task title<input class="field" name="title" maxlength="200" placeholder="Find 3 new income ideas" required></label>
+      <label style="grid-column:1/-1">Details<textarea class="field" name="details" rows="2" placeholder="What should be done each time, and what a good result looks like."></textarea></label>
+      <label>Who<select class="field" name="assignee">${agentOptions()}</select></label>
+      <label>Channel<select class="field" name="channel">${S.channels.map(c => `<option ${c.name === "tasks" ? "selected" : ""} value="${esc(c.name)}">${c.private ? "🔒 " : "#"}${esc(c.name)}</option>`).join("")}</select></label>
+      <label>How often<select class="field" name="every"><option value="day">Every day</option><option value="weekday">Weekdays (Mon–Fri)</option><option value="week">Once a week</option><option value="hours">Every few hours</option></select></label>
+      <label data-for="week">Day<select class="field" name="weekday">${DAY_NAMES.map((d, i) => `<option value="${i}">${d}</option>`).join("")}</select></label>
+      <label data-for="time">At<input class="field" name="at" type="time" value="09:00"></label>
+      <label data-for="hours">Every … hours<input class="field" name="hours" type="number" min="1" max="168" value="6"></label>
+      <label>Priority<select class="field" name="priority"><option>low</option><option selected>normal</option><option>high</option></select></label>
+      <label>&nbsp;<button class="btn pri">Add routine</button></label>
+    </form><p class="hint" id="hubTime"></p></div>`);
+  const f = $("#routineAdd");
+  const sync = () => {
+    const ev = f.elements.every.value;
+    $("[data-for=week]", f).hidden = ev !== "week";
+    $("[data-for=time]", f).hidden = ev === "hours";
+    $("[data-for=hours]", f).hidden = ev !== "hours";
+  };
+  f.elements.every.onchange = sync; sync();
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const x = f.elements;
+    try {
+      await api("/api/routines", { method: "POST", body: { title: x.title.value, details: x.details.value, assignee: x.assignee.value,
+        channel: x.channel.value, every: x.every.value, weekday: +x.weekday.value, at: x.at.value, hours: +x.hours.value, priority: x.priority.value } });
+      f.reset(); sync(); toast("Routine added 🔁"); loadRoutines();
+    } catch (err) { toast(err.message, true); }
+  };
+  await loadRoutines();
+}
+function whenAt(t) { return t ? new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "never"; }
+async function loadRoutines() {
+  if (!$("#routineList")) return;
+  const r = await api("/api/routines");
+  if (S.route.view !== "routines") return;
+  $("#hubTime").textContent = `Times use ${r.time_zone} (it's ${r.hub_time} there now).`;
+  $("#routineList").innerHTML = r.routines.length ? r.routines.map(x => `<div class="item" style="cursor:default;${x.enabled ? "" : "opacity:.6"}">
+    ${avatar(x.assignee, "sm")}<div class="grow"><div class="row"><b>${esc(x.title)}</b><span class="tag">🔁 ${esc(x.schedule)}</span>
+      ${x.enabled ? "" : '<span class="tag">paused</span>'}${x.demo ? '<span class="tag">demo</span>' : ""}</div>
+    <div class="hint">${esc(member(x.assignee).name)} · ${(S.channels.find(c => c.name === x.channel) || {}).private ? "🔒 " : "#"}${esc(x.channel)} · next: ${x.enabled ? whenAt(x.next_run) : "—"} · last: ${whenAt(x.last_run)}${x.skipped ? ` · skipped ${plural(x.skipped, "time")} (last task unfinished)` : ""}</div>
+    <div class="snip">${esc(x.details)}</div>
+    <div class="row" style="margin-top:6px"><button class="btn sm" data-routine-run="${x.id}">▶ Run now</button>
+      <button class="btn sm" data-routine-toggle="${x.id}" data-on="${x.enabled ? 1 : 0}">${x.enabled ? "⏸ Pause" : "▶ Resume"}</button>
+      ${x.last_task_id && taskById(x.last_task_id) ? `<button class="btn sm" data-thread="${taskById(x.last_task_id).message_id}">Last task</button>` : ""}
+      <span class="grow"></span><button class="btn sm danger" data-routine-delete="${x.id}">Delete</button></div></div></div>`).join("")
+    : '<div class="empty">No routines yet. Add one below, e.g. “Scholar: every Monday, find 3 income ideas”.</div>';
+}
+
 async function viewSearch(q) {
   $("#q").value = q;
   setHeader(`<div class="view-head"><span class="hico">🔎</span><div class="grow"><h1>Search</h1><p>Results for “${esc(q)}”</p></div></div><div class="feed" id="results"><div class="empty">Searching…</div></div>`);
@@ -882,6 +939,13 @@ document.addEventListener("click", async e => {
       await api(`/api/admin/agents/${d.remove}`, { method: "DELETE" }); refreshSoon(10);
     } else if (d.roomRemove) {
       await api(`/api/admin/channels/${encodeURIComponent(d.roomRemove)}/members`, { method: "POST", body: { remove: [d.who] } }); refreshSoon(10);
+    } else if (d.routineRun) {
+      await api(`/api/routines/${d.routineRun}/run`, { method: "POST", body: {} }); toast("Task created"); refreshSoon(10);
+    } else if (d.routineToggle) {
+      await api(`/api/routines/${d.routineToggle}`, { method: "POST", body: { enabled: d.on !== "1" } }); refreshSoon(10);
+    } else if (d.routineDelete) {
+      if (!confirm("Delete this routine? Tasks it already created stay.")) return;
+      await api(`/api/routines/${d.routineDelete}`, { method: "DELETE" }); refreshSoon(10);
     } else if (d.react) {
       await api(`/api/messages/${d.react}/react`, { method: "POST", body: { value: +d.val } }); refreshSoon(10);
     } else if (d.goto) {
@@ -982,7 +1046,7 @@ function parseRoute() {
   const [view, ...rest] = h.split("/");
   const arg = decodeURIComponent(rest.join("/"));
   if (view === "c" && arg) return { view: "c", name: arg };
-  if (["tasks", "inbox", "admin", "memory"].includes(view)) return { view };
+  if (["tasks", "inbox", "admin", "memory", "routines"].includes(view)) return { view };
   if (view === "search" && arg) return { view: "search", q: arg };
   return { view: "c", name: "general" };
 }
@@ -998,6 +1062,7 @@ async function route() {
     else if (r.view === "inbox") await viewInbox();
     else if (r.view === "admin") await viewAdmin();
     else if (r.view === "memory") await viewMemory();
+    else if (r.view === "routines") await viewRoutines();
     else if (r.view === "search") await viewSearch(r.q);
   } catch (x) { if (x.status !== 401) setHeader(`<div class="empty">${esc(x.message)}</div>`); }
 }
@@ -1020,6 +1085,7 @@ async function refresh() {
     else if (r.view === "tasks") renderBoard();
     else if (r.view === "inbox") await loadInbox();
     else if (r.view === "memory") await loadMemory();
+    else if (r.view === "routines") await loadRoutines();
     else if (r.view === "admin") renderAdminParts(await api("/api/admin/overview"));
     if (S.thread) await loadThread();
   } catch (x) { if (x.status !== 401) console.warn(x); }

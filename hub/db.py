@@ -138,6 +138,26 @@ CREATE TABLE IF NOT EXISTS reactions (
     PRIMARY KEY (message_id, member)
 );
 
+CREATE TABLE IF NOT EXISTS routines (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT NOT NULL,
+    details     TEXT NOT NULL DEFAULT '',
+    assignee    TEXT NOT NULL,
+    channel     TEXT NOT NULL,
+    priority    TEXT NOT NULL DEFAULT 'normal',
+    every       TEXT NOT NULL,              -- day | weekday | week | hours
+    at          TEXT NOT NULL DEFAULT '09:00',
+    weekday     INTEGER NOT NULL DEFAULT 0, -- 0 = Monday (for "week")
+    hours       INTEGER NOT NULL DEFAULT 24,-- for "hours"
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    next_run    REAL,
+    last_run    REAL,
+    last_task_id INTEGER,
+    skipped     INTEGER NOT NULL DEFAULT 0, -- runs skipped because the last task wasn't finished
+    created_at  REAL NOT NULL,
+    demo        INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL
@@ -160,6 +180,7 @@ MIGRATIONS = [
     ("messages", "client_id", "TEXT"),                          # sender's id for safe re-sending
     ("members", "task_autonomy", "TEXT NOT NULL DEFAULT 'ask'"),  # ask | free | strict (see core.AUTONOMY)
     ("inbox", "memory_id", "INTEGER"),                          # a family-memory item this is about
+    ("tasks", "routine_id", "INTEGER"),                         # set when a routine created the task
 ]
 
 

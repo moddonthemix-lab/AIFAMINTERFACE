@@ -56,6 +56,7 @@ def wipe_demo(hub):
             # System notes inside demo threads go too.
             c.execute(f"DELETE FROM messages WHERE reply_to IN ({marks})", ids)
         c.execute("DELETE FROM tasks WHERE demo=1")
+        c.execute("DELETE FROM routines WHERE demo=1")
         if ids:
             c.execute(f"DELETE FROM reactions WHERE message_id IN ({marks})", ids)
         c.execute("DELETE FROM inbox WHERE memory_id IN (SELECT id FROM memories WHERE demo=1)")
@@ -144,6 +145,14 @@ def demo(hub):
                        demo=True)  # waits for the boss's approval
     hub.propose_memory(m("scholar"), "other", "Baby learns best from one small example at a time.",
                        scope="scholar+baby", demo=True)
+    hub.create_routine({"title": "Find 3 new income ideas", "assignee": "scholar", "channel": "business",
+                        "details": "Look for 3 ideas that match the boss's interests & goals. Post each as a finding "
+                                   "with sources, and say how much it could earn and what it takes to start.",
+                        "every": "week", "weekday": 0, "at": "09:00"}, demo=True)
+    hub.create_routine({"title": "Learn one thing about game development", "assignee": "baby",
+                        "channel": "scholar+baby", "every": "day", "at": "17:00", "priority": "low",
+                        "details": "Pick one small game-development topic, try to understand it, and ask Scholar "
+                                   "if something is unclear. Share what you learned."}, demo=True)
     q = say("baby", "scholar+baby", "question",
             "Scholar, what's the difference between a verified finding and a reported one?", {"to": "scholar"})
     say("scholar", "scholar+baby", "post",

@@ -120,6 +120,8 @@ def work_on_task(task, local_only):
     hub.post_result(task["id"], "Plain-language summary of what I found or did.",
                     artifacts=["report path, URL or commit"])
 ```
+- Tasks with a `routine_id` come from a **routine** (a repeating task the boss set up, e.g. "every Monday, find
+  3 income ideas"). Treat them like any task, and keep each run fresh: don't repeat last week's answer.
 - If you can't do it, use `update_task(id, "declined", "why")`. If you're stuck, use `update_task(id, "blocked", "the reason")`.
   `blocked` always needs a reason.
 - **To hand part of a job to another agent**, use `request_task(..., parent_task=<your task id>)`. Steps of a

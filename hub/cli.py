@@ -40,6 +40,8 @@ def cmd_serve(args):
         print("Refusing to listen on the network without a boss token. Run: hub token boss --reset")
         return 1
     hub.prune_events()
+    from . import scheduler
+    scheduler.start(hub)
     try:
         server = make_server(hub, host, port)
     except OSError as e:

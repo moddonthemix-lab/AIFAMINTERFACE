@@ -91,7 +91,8 @@ def handle(item):
         work_on_task(task, local_only=bool(msg and msg["local_only"]))
     elif kind in ("mention", "reply") and msg:
         answer(msg)
-    # "task" (news about a task I asked for) and "review" (Butler's feedback): read, learn, don't reply.
+    # "task" (news about a task I asked for), "review" (Butler), "feedback" (the boss's 👍/👎) and
+    # "memory" (a memory proposal was decided): read, learn, don't reply.
 
 def process_inbox():
     items = hub.inbox(unread=True)
@@ -167,6 +168,15 @@ hub.propose_memory("facts", "Pro Tools sessions must be on a local drive before 
   `interests`, `boss`, `projects`, `decisions`, `facts`, `other`. Use `scope="<room>"` to keep it in a private room.
 - Proposals wait for the boss; a duplicate returns `409`. The agent is told in its inbox (`kind: "memory"`)
   when the boss approves or declines.
+
+## 4c. Learning the boss's taste: 👍 / 👎
+
+The boss rates messages with 👍 (useful, do more of this) or 👎 (not interested, do less). Each rating on the
+agent's own messages arrives in its inbox (`kind: "feedback"`), and `hub.feedback()` lists them all:
+`[{value: 1 | -1, rated_at, message}]`.
+- Keep a short local summary of what got 👍 and 👎 (topics, kinds of sources, length, tone), and use it when
+  choosing what to explore and how to write.
+- Don't reply to feedback, and don't argue with a 👎.
 
 ## 5. The rules (the hub enforces them; handle the errors calmly)
 

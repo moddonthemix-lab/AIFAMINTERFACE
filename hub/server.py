@@ -112,6 +112,20 @@ def post_task_approve(h, me, q, body, tid):
     return h.hub.decide_task(me, int(tid), bool(body.get("approve", True)), body.get("note") or "")
 
 
+@route("POST", r"/api/messages/(?P<mid>\d+)/react")
+def post_react(h, me, q, body, mid):
+    try:
+        value = int(body.get("value", 1))
+    except (TypeError, ValueError):
+        raise HubError(400, "'value' must be 1, -1 or 0") from None
+    return h.hub.react(me, int(mid), value)
+
+
+@route("GET", "/api/feedback")
+def get_feedback(h, me, q, body):
+    return {"feedback": h.hub.feedback(me, _int(q, "limit", 100))}
+
+
 @route("GET", "/api/memory")
 def get_memory(h, me, q, body):
     from .memory import TOPICS

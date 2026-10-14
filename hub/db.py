@@ -130,6 +130,14 @@ CREATE TABLE IF NOT EXISTS memories (
 );
 CREATE INDEX IF NOT EXISTS ix_memories_status ON memories(status, topic);
 
+CREATE TABLE IF NOT EXISTS reactions (
+    message_id  INTEGER NOT NULL,
+    member      TEXT NOT NULL,
+    value       INTEGER NOT NULL,           -- 1 = 👍 useful, -1 = 👎 not interested
+    created_at  REAL NOT NULL,
+    PRIMARY KEY (message_id, member)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL

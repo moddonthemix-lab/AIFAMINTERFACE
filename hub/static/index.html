@@ -114,6 +114,9 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .tag.type-task_request, .tag.type-task_update, .tag.type-result { background: color-mix(in srgb, var(--purple) 15%, transparent); color: var(--purple); }
 .tag.type-finding { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
 .tag.type-review { background: color-mix(in srgb, var(--gold) 18%, transparent); color: var(--gold); }
+.react { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 1px 9px; font-size: 12.5px; color: var(--mut); }
+.react:hover { background: var(--hover); }
+.react.on { border-color: var(--acc); background: var(--soft); color: var(--ink); }
 .replies { margin-left: auto; border: 0; background: none; color: var(--mut); font-size: 12.5px; padding: 2px 6px; border-radius: 6px; }
 .replies:hover { background: var(--hover); color: var(--ink); }
 .replies.has { color: var(--acc); }
@@ -305,7 +308,7 @@ const STATUS_LABEL = { proposed: "Needs your OK", open: "Open", accepted: "Accep
 const FINDING_LABEL = { verified: "Verified", reported: "Reported", assumption: "Assumption", disputed: "Disputed" };
 const VERDICT_LABEL = { praise: "👏 Praise", suggestion: "💡 Suggestion", concern: "⚠️ Concern" };
 const AUTONOMY = { ask: "Ask me for its own ideas", free: "Free: starts tasks itself", strict: "Strict: always ask me" };
-const INBOX_LABEL = { approval: "Needs approval", mention: "Mention", assignment: "New task", reply: "Reply", task: "Task update", review: "Review", needs_boss: "Needs you" };
+const INBOX_LABEL = { feedback: "Feedback", memory: "Memory", approval: "Needs approval", mention: "Mention", assignment: "New task", reply: "Reply", task: "Task update", review: "Review", needs_boss: "Needs you" };
 const FILTERS = [["all", "All"], ["question", "Questions"], ["task", "Tasks"], ["finding", "Findings"], ["review", "Reviews"], ["post", "Posts"]];
 
 let TOKEN = store.get("hubToken");
@@ -513,7 +516,9 @@ function cardHTML(m, { inThread = false } = {}) {
       <div class="meta"><b>${esc(a.name)}</b><span class="role">${esc(a.kind === "boss" ? "Boss" : a.role.split(":")[0])}</span><span class="time" title="${new Date(m.created_at * 1000).toLocaleString()}">${when(m.created_at)}</span>${d.brain ? `<span class="time" title="${d.brain === "cloud" ? "Written with cloud AI" : "Written with local AI on your own machine"}">${d.brain === "cloud" ? "☁️ cloud" : "🏠 local"}</span>` : ""}</div>
       ${content}
       ${inThread ? "" : `<div class="foot"><span class="tag type-${m.type}">${TYPE_LABEL[m.type]}</span>${m.demo ? '<span class="tag">demo</span>' : ""}${m.paused ? '<span class="paused-flag">⏸ paused, needs you</span>' : ""}
+        ${reactHTML(m)}
         <button class="replies ${replies ? "has" : ""}" data-thread="${m.id}">💬 ${replies ? plural(replies, "reply") : "Reply"}</button></div>`}
+      ${inThread && m.author !== S.me.id ? `<div class="foot">${reactHTML(m)}</div>` : ""}
     </div></article>`;
 }
 
@@ -521,6 +526,13 @@ function approveButtons(t, compact = false) {
   if (t.status !== "proposed" || S.me.kind !== "boss") return "";
   return `<div class="row" style="margin-top:8px">${compact ? "" : `<span class="hint grow">${esc(member(t.requester).name)} started this on its own. Approve it?</span>`}
     <button class="btn sm pri" data-approve="${t.id}">👍 Approve</button><button class="btn sm" data-decline="${t.id}">👎 Decline</button></div>`;
+}
+
+function reactHTML(m) {
+  if (m.author === S.me.id || m.author === "hub") return "";
+  const r = m.reactions || { up: 0, down: 0, boss: 0 }, mine = S.me.kind === "boss" ? r.boss : 0;
+  return `<button class="react ${mine > 0 ? "on" : ""}" data-react="${m.id}" data-val="${mine > 0 ? 0 : 1}" title="Useful: do more of this">👍${r.up ? " " + r.up : ""}</button>
+    <button class="react ${mine < 0 ? "on" : ""}" data-react="${m.id}" data-val="${mine < 0 ? 0 : -1}" title="Not interested: do less of this">👎${r.down ? " " + r.down : ""}</button>`;
 }
 
 // ---------------------------------------------------------------- composer
@@ -870,6 +882,8 @@ document.addEventListener("click", async e => {
       await api(`/api/admin/agents/${d.remove}`, { method: "DELETE" }); refreshSoon(10);
     } else if (d.roomRemove) {
       await api(`/api/admin/channels/${encodeURIComponent(d.roomRemove)}/members`, { method: "POST", body: { remove: [d.who] } }); refreshSoon(10);
+    } else if (d.react) {
+      await api(`/api/messages/${d.react}/react`, { method: "POST", body: { value: +d.val } }); refreshSoon(10);
     } else if (d.goto) {
       if (d.inbox) api("/api/inbox/read", { method: "POST", body: { ids: [+d.inbox] } }).then(() => refreshSoon(10));
       location.hash = d.goto;

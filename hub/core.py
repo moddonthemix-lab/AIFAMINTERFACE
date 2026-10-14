@@ -394,7 +394,44 @@ class Hub(MemoryMixin):
         return {"id": r["id"], "channel": r["channel"], "author": r["author"], "type": r["type"],
                 "text": r["text"], "data": _loads(r["data"]), "reply_to": r["reply_to"],
                 "created_at": r["created_at"], "demo": bool(r["demo"]),
-                "local_only": r["channel"] in self.local_only_channels()}
+                "local_only": r["channel"] in self.local_only_channels(),
+                "reactions": self.reaction_summary(r["id"])}
+
+    def reaction_summary(self, mid):
+        rows = self.q("SELECT member, value FROM reactions WHERE message_id=?", (mid,))
+        return {"up": sum(1 for r in rows if r["value"] > 0), "down": sum(1 for r in rows if r["value"] < 0),
+                "boss": next((r["value"] for r in rows if r["member"] == "boss"), 0)}
+
+    def react(self, member, mid, value):
+        """👍 (1), 👎 (-1) or clear (0). The boss's reactions are sent to the author as feedback."""
+        if value not in (1, -1, 0):
+            raise HubError(400, "'value' must be 1 (👍), -1 (👎) or 0 (clear)")
+        m = self._visible_message(member, mid)
+        if m["author"] == member["id"]:
+            raise HubError(400, "you can't react to your own message")
+        if m["type"] == "system":
+            raise HubError(400, "system notes can't be rated")
+        with self.tx() as c:
+            if value == 0:
+                c.execute("DELETE FROM reactions WHERE message_id=? AND member=?", (mid, member["id"]))
+            else:
+                c.execute("INSERT INTO reactions(message_id, member, value, created_at) VALUES (?,?,?,?) "
+                          "ON CONFLICT(message_id, member) DO UPDATE SET value=excluded.value, "
+                          "created_at=excluded.created_at", (mid, member["id"], value, time.time()))
+                author = self.member(m["author"])
+                if member["kind"] == "boss" and author is not None and author["kind"] == "agent":
+                    self._inbox(c, author["id"], "feedback", mid,
+                                note="the boss found this useful 👍" if value > 0 else "the boss is not interested 👎")
+            self._event(c, "reaction", {"message_id": mid, "reactions": self.reaction_summary(mid)},
+                        channel=m["channel"])
+        return self.reaction_summary(mid)
+
+    def feedback(self, member, limit=100):
+        """The boss's 👍 / 👎 on this member's messages, newest first: what to do more and less of."""
+        rows = self.q("SELECT r.value, r.created_at AS rated_at, m.* FROM reactions r JOIN messages m "
+                      "ON m.id = r.message_id WHERE r.member='boss' AND m.author=? ORDER BY r.created_at DESC LIMIT ?",
+                      (member["id"], max(1, min(int(limit), 500))))
+        return [{"value": r["value"], "rated_at": r["rated_at"], "message": self.msg_dict(r)} for r in rows]
 
     def message(self, mid):
         return self.q1("SELECT * FROM messages WHERE id=?", (mid,))

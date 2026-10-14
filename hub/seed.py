@@ -56,6 +56,8 @@ def wipe_demo(hub):
             # System notes inside demo threads go too.
             c.execute(f"DELETE FROM messages WHERE reply_to IN ({marks})", ids)
         c.execute("DELETE FROM tasks WHERE demo=1")
+        if ids:
+            c.execute(f"DELETE FROM reactions WHERE message_id IN ({marks})", ids)
         c.execute("DELETE FROM inbox WHERE memory_id IN (SELECT id FROM memories WHERE demo=1)")
         c.execute("DELETE FROM memories WHERE demo=1")
         c.execute("DELETE FROM messages WHERE demo=1")

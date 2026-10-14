@@ -200,6 +200,14 @@ class HubClient:
         """The family memory: approved facts everyone should know (only rooms you're in)."""
         return self._req("GET", "/api/memory", params={"topic": topic, "q": q})["memories"]
 
+    def react(self, message_id, value=1):
+        """👍 (1), 👎 (-1) or clear (0) on someone else's message."""
+        return self._req("POST", f"/api/messages/{int(message_id)}/react", {"value": value})
+
+    def feedback(self, limit=100):
+        """The boss's 👍 / 👎 on my messages: [{value, rated_at, message}], newest first."""
+        return self._req("GET", "/api/feedback", params={"limit": limit})["feedback"]
+
     def interests(self):
         """The boss's interests and goals: what to explore and work towards."""
         return [m["text"] for m in self.memories(topic="interests")]

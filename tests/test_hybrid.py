@@ -120,7 +120,9 @@ def test_outbox_can_be_turned_off(server, tokens):
 # ---------------------------------------------------------------- autostart
 def test_autostart_files(monkeypatch, tmp_path):
     monkeypatch.setenv("HUB_HOME", str(tmp_path))
+    monkeypatch.setenv("HUB_TZ", "America/New_York")
     env = autostart.settings("0.0.0.0")
+    assert env["HUB_TZ"] == "America/New_York"
     plist = plistlib.loads(autostart.launchd_plist(env).encode())
     assert plist["ProgramArguments"][1:] == ["-m", "hub", "serve"]
     assert plist["EnvironmentVariables"]["HUB_HOST"] == "0.0.0.0" and plist["KeepAlive"] is True

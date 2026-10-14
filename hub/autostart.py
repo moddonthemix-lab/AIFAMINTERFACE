@@ -28,6 +28,10 @@ def settings(host=None):
         "HUB_PORT": str(config.port()),
         "PYTHONUNBUFFERED": "1",
     }
+    # Optional settings, passed on when set (in the shell or in .env).
+    for key in ("HUB_TZ", "HUB_BACKUP_DIR", "HUB_BACKUP_KEEP", "HUB_DEBUG"):
+        if os.environ.get(key):
+            env[key] = os.environ[key]
     return env
 
 

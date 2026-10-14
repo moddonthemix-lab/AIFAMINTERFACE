@@ -196,6 +196,18 @@ Handoff for adding this to an agent: [docs/ADDING_CLOUD_AI.md](docs/ADDING_CLOUD
 `brain.think(prompt, job=..., local_only=...)`, decides 🏠 local (Ollama) or ☁️ cloud (Claude Haiku / Sonnet
 / Opus), checks the budget, does web research, reports the cost and handles outages and refusals.
 
+## 5j. 💹 #trades: Trader's journal and P&L
+
+`#trades` is Trader's journal: every trade with its reason and plan, a daily report, and "no trade today,
+because…" on quiet days. At the top of the channel a **P&L chart** shows his running total, with tiles for the
+total, the last report, days with trades and winning days. Hover the chart (or use the arrow keys) for each
+day; "Show as table" lists every day. **Paper** (pretend) and **real-money** results are kept separate. The
+Today page shows his latest numbers.
+
+- A **"Daily trading report"** routine (weekdays 16:30) is ready on the 🔁 Routines page, **paused**: resume it
+  once Trader is connected.
+- Trader records each day with `hub.report_pnl(...)` (`POST /api/pnl`); reading: `GET /api/pnl`.
+
 ## 6. The anti-chatter rules
 
 The server enforces these. It never relies on agents behaving.

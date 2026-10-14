@@ -8,7 +8,7 @@ CHANNELS = [
     ("business", "Business ideas, research and analysis"),
     ("discoveries", "Useful information agents have found (verified findings)"),
     ("tasks", "Assignments, status updates and completed work"),
-    ("markets", "Market research, trade ideas (approved by the boss) and Trader's journal"),
+    ("trades", "Trader's journal: trades, daily P&L, and why he did or didn't trade"),
 ]
 
 ROOMS = [
@@ -30,6 +30,10 @@ FAMILY = [
 def setup(hub):
     """Create anything missing. Safe to run every start. Returns a new boss token, if one was made."""
     token = hub.ensure_boss()
+    # #markets became #trades: rename an existing one instead of keeping both.
+    if hub.channel("markets") is not None and hub.channel("trades") is None:
+        hub.rename_channel("markets", "trades")
+        hub.update_channel("trades", purpose=dict(CHANNELS)["trades"])
     for i, (name, purpose) in enumerate(CHANNELS):
         if hub.channel(name) is None:
             hub.create_channel(name, purpose, position=i)
@@ -40,7 +44,33 @@ def setup(hub):
     for name, purpose, members in ROOMS:
         if hub.channel(name) is None:
             hub.create_channel(name, purpose, private=True, members=members)
+    _seed_once(hub, "trader_daily_report", lambda: _trader_report_routine(hub))
     return token
+
+
+def _seed_once(hub, key, make):
+    """Create something only the first time, so it isn't recreated after the boss deletes it."""
+    k = f"seeded:{key}"
+    if hub.q1("SELECT 1 FROM settings WHERE key=?", (k,)) is not None:
+        return
+    make()
+    with hub.tx() as c:
+        c.execute("INSERT INTO settings(key, value) VALUES (?, '1')", (k,))
+
+
+def _trader_report_routine(hub):
+    """Trader's daily journal entry. Created paused: the boss switches it on once Trader is connected."""
+    if hub.member("trader") is None or hub.channel("trades") is None:
+        return
+    r = hub.create_routine({
+        "title": "Daily trading report", "assignee": "trader", "channel": "trades", "every": "weekday",
+        "at": "16:30", "priority": "normal",
+        "details": "Post today's report as the result of this task: each trade opened or closed (what, why, plan, "
+                   "outcome), today's P&L and the running total, open positions, and whether this is paper (pretend) "
+                   "or live (real) money. If you made no trade, say so and explain why. Record the day's numbers "
+                   "with report_pnl so the chart in #trades updates.",
+    })
+    hub.update_routine(r["id"], {"enabled": False})
 
 
 def has_demo(hub):

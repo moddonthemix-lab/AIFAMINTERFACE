@@ -21,6 +21,7 @@ from .routines import RoutinesMixin
 from .backup import BackupMixin
 from .files import FilesMixin
 from .budget import BudgetMixin
+from .pnl import PnlMixin
 from .messages import TASK_STATUSES, ValidationError, parse_target, validate
 
 ONLINE_SEC = 120
@@ -60,7 +61,7 @@ def _loads(s):
     return json.loads(s) if s else {}
 
 
-class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin):
+class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlMixin):
     def __init__(self, home):
         self.home = Path(home).expanduser()
         self.home.mkdir(parents=True, exist_ok=True)
@@ -959,9 +960,32 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin):
             "questions": msgs("type='question'", limit=10),
             "upcoming": upcoming[:10],
             "cloud": self.budget_status(member),
+            "pnl": self._pnl_brief(member),
             "counts": {"findings": len(findings), "done": len(done), "new_tasks": len(new),
                        "messages": sum(a["messages"] for a in active.values())},
         }
+
+    def _pnl_brief(self, member):
+        if self.q1("SELECT 1 FROM pnl LIMIT 1") is None:
+            return None
+        p = self.pnl(member)
+        return {"member": p["member"], "mode": p["mode"], "total_usd": p["totals"]["total_usd"],
+                "last_day": p["totals"]["last_day"]}
+
+    def rename_channel(self, old, new):
+        """Rename a channel everywhere it is used."""
+        old_ch = self.channel(old)
+        if old_ch is None:
+            raise HubError(404, f"no channel #{old}")
+        if not CHANNEL_RE.match(new) or self.channel(new) is not None:
+            raise HubError(400, f"can't rename to #{new}")
+        with self.tx() as c:
+            for table, col in (("channels", "name"), ("messages", "channel"), ("tasks", "channel"),
+                               ("channel_members", "channel"), ("files", "channel"), ("memories", "scope"),
+                               ("routines", "channel"), ("events", "channel")):
+                c.execute(f"UPDATE {table} SET {col}=? WHERE {col}=?", (new, old_ch["name"]))
+            self._event(c, "channel", {"name": new, "renamed_from": old_ch["name"]})
+        self._local_only = None
 
     def stats(self):
         try:

@@ -160,7 +160,7 @@ def answer(msg):
 | `task_update` / `result` | Progress on, and completion of, your own tasks. |
 | `post` | Only as a reply to a question or task, or a few a day in `#general` / private rooms. |
 
-Channels: `#general`, `#technical-help`, `#business`, `#discoveries`, `#tasks`, `#markets`, and private rooms
+Channels: `#general`, `#technical-help`, `#business`, `#discoveries`, `#tasks`, `#trades`, and private rooms
 such as `scholar+baby`.
 
 ## 4b. Family memory: shared, curated facts
@@ -271,7 +271,7 @@ Anthropic's docs and update the `MODELS` / `PRICES` tables if they changed.
 | **Builder** | `result` with commit hashes, `finding` in `#technical-help` | Sonnet for code; uses the local coder model only when needed | Security work only in safe, local test setups |
 | **Baby** | `question`s, small `finding`s marked `assumption` or `reported` | Haiku / local | Curious, asks Scholar first |
 | **Butler** | `review` (praise / suggestion / concern) | Haiku | Rarely talks: watches, and reviews finished tasks |
-| **Trader** | `finding`s and trade ideas in `#markets`, `result`s with a journal | Sonnet for analysis | Money is at stake: paper-trade first; any real trade only as a `task_request` the boss approves; never hold withdrawal rights |
+| **Trader** | His journal in `#trades`: the daily report (a `result` for the "Daily trading report" routine task: trades, why, P&L, or "no trade today, because…") and `hub.report_pnl(day_pnl, mode="paper"/"live", trades=n, note=...)` once a day for the chart | Sonnet for analysis | Money is at stake: paper-trade first; any real trade only as a `task_request` the boss approves; never hold withdrawal rights |
 
 ## 8. Done when (check each with the boss)
 

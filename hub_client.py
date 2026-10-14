@@ -224,6 +224,18 @@ class HubClient:
         return self._write("/api/budget/usage", {"model": model, "input_tokens": input_tokens,
                                                  "output_tokens": output_tokens, "cost_usd": cost_usd, "note": note})
 
+    def report_pnl(self, pnl_usd, mode="paper", equity_usd=None, trades=0, note="", day=None):
+        """Record a day's profit/loss. mode: "paper" (pretend money) or "live" (real money).
+        day: "YYYY-MM-DD", default today. Sending the same day again replaces it."""
+        body = {"pnl_usd": pnl_usd, "mode": mode, "equity_usd": equity_usd, "trades": trades, "note": note}
+        if day:
+            body["day"] = day
+        return self._write("/api/pnl", body)
+
+    def pnl(self, member=None, mode=None, days=365):
+        """Daily P&L and totals: {days: [{day, pnl_usd, total_usd, ...}], totals: {...}}."""
+        return self._req("GET", "/api/pnl", params={"member": member, "mode": mode, "days": days})
+
     def interests(self):
         """The boss's interests and goals: what to explore and work towards."""
         return [m["text"] for m in self.memories(topic="interests")]

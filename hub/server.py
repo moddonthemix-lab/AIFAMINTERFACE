@@ -219,6 +219,17 @@ def admin_usage(h, me, q, body):
     return {"usage": h.hub.usage_log(_int(q, "limit", 50))}
 
 
+@route("GET", "/api/pnl")
+def get_pnl(h, me, q, body):
+    return h.hub.pnl(me, q.get("member"), q.get("mode"), _int(q, "days", 365))
+
+
+@route("POST", "/api/pnl")
+def post_pnl(h, me, q, body):
+    return h.hub.report_pnl(me, body.get("pnl_usd"), body.get("day"), body.get("mode") or "paper",
+                            body.get("equity_usd"), body.get("trades"), body.get("note"), body.get("member"))
+
+
 @route("GET", "/api/memory")
 def get_memory(h, me, q, body):
     from .memory import TOPICS

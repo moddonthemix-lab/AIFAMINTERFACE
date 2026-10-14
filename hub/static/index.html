@@ -214,6 +214,18 @@ textarea.field { width: 100%; resize: vertical; }
 .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; min-width: 80px; }
 .bar i { display: block; height: 100%; background: var(--good); }
 .bar i.warn { background: var(--warn); } .bar i.bad { background: var(--bad); }
+.pnl { margin: 0 22px 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; }
+.pnl .tiles { padding: 8px 0 10px; }
+.pnl .tile { background: var(--bg); }
+.pnl .tile b { font-size: 20px; }
+.pv { font-style: normal; white-space: nowrap; } .pv.up { color: var(--good); } .pv.down { color: var(--bad); }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: 190px; outline: none; }
+.chart svg:focus-visible { box-shadow: 0 0 0 2px var(--acc); border-radius: 6px; }
+.chart .tick { fill: var(--mut); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.15); white-space: nowrap; max-width: 260px; }
+.tip b { display: block; font-size: 14px; }
+.tip span { color: var(--mut); display: block; white-space: normal; }
 .list { display: flex; flex-direction: column; gap: 8px; padding: 0 22px 22px; }
 .item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); cursor: pointer; }
 .item.unread { border-left: 3px solid var(--acc); }
@@ -677,6 +689,7 @@ async function viewChannel(name) {
       <p>${esc(ch.purpose)}${ch.private ? ` · members: ${ch.members.map(m => esc(member(m).name)).join(", ")} (and you)` : ""}
       ${ch.local_only ? ' · <span class="tag local" title="Agents keep this channel on local AI models; it is never sent to cloud AI.">🏠 Local AI only</span>' : ""}</p></div>
       <button class="btn pri" id="newBtn">＋ New post</button></div>
+    ${name === "trades" ? '<div id="pnlPanel"></div>' : ""}
     <div class="pills" id="pills">${FILTERS.map(([k, l]) => `<button class="pill ${S.filter === k ? "on" : ""}" data-filter="${k}">${l}</button>`).join("")}</div>
     <div class="feed" id="feed"><div class="empty">Loading…</div></div>
     ${composerHTML("composer")}`);
@@ -686,6 +699,7 @@ async function viewChannel(name) {
   });
   $("#newBtn").onclick = () => $("#composer textarea").focus();
   wireComposer($("#composer"), { channel: () => name });
+  if (name === "trades") loadPnl();
   await loadFeed(true);
 }
 async function loadFeed(scrollEnd = false) {
@@ -901,6 +915,9 @@ async function loadToday() {
       <small>${plural(a.messages, "message")} · ${plural(a.findings, "finding")} · ${plural(a.results, "result")}</small></div></div>`).join(""))}
     ${S.me.kind === "boss" && r.cloud && r.cloud.agents ? sec(`☁️ Cloud spending in ${esc(r.cloud.month)}`, cloudRows(r.cloud, false)
       + `<div class="hint" style="margin-top:6px">Family total: ${money(r.cloud.family_spent)}${r.cloud.family_budget > 0 ? " of " + money(r.cloud.family_budget) : ""} · set budgets on the <a href="#/admin">Admin page</a></div>`) : ""}
+    ${r.pnl ? sec("💹 Trading", `<div class="item" data-goto="#/c/trades">${avatar(r.pnl.member, "sm")}<div class="grow"><div class="row"><b>${esc(member(r.pnl.member).name)}</b>
+      <span class="tag">${r.pnl.mode === "live" ? "💵 real money" : "📝 paper"}</span></div>
+      <div class="hint">Total ${pnlValue(r.pnl.total_usd)}${r.pnl.last_day ? ` · last report ${esc(r.pnl.last_day.day)}: ${pnlValue(r.pnl.last_day.pnl_usd)}` : ""}</div></div></div>`) : ""}
     ${sec("🔁 Coming up", r.upcoming.map(x => `<div class="p-row">${avatar(x.assignee, "sm")}<div class="grow"><b>${esc(x.title)}</b><small>${esc(member(x.assignee).name)} · ${whenAt(x.next_run)}</small></div></div>`).join(""))}
     ${!nWait && !c.findings && !c.done && !c.new_tasks ? '<div class="empty">A quiet day. Nothing new yet. 🌿</div>' : ""}`;
 }
@@ -915,6 +932,100 @@ function cloudRows(c, editable) {
   return (c.agents || []).map(a => `<div class="p-row">${avatar(a.member, "sm")}<div class="grow"><div class="row"><b>${esc(member(a.member).name)}</b>
       <span class="hint">${a.budget > 0 ? `${money(a.spent)} of ${money(a.budget)}` : "🏠 local only (no cloud budget)"}</span></div>${a.budget > 0 ? budgetBar(a) : ""}</div>
       ${editable ? `<label class="hint">$/month <input class="field" type="number" min="0" step="0.5" value="${a.budget}" data-budget="${a.member}" style="width:80px"></label>` : ""}</div>`).join("");
+}
+
+// ---------------------------------------------------------------- P&L (#trades)
+function usd(v, signed = true) {
+  const s = "$" + Math.abs(v).toLocaleString([], { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return signed ? (v > 0 ? "+" : v < 0 ? "−" : "") + s : (v < 0 ? "−" : "") + s;
+}
+function pnlValue(v) { return `<i class="pv ${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "<small>▲</small> " : v < 0 ? "<small>▼</small> " : ""}${usd(v)}</i>`; }
+async function loadPnl(mode) {
+  const box = $("#pnlPanel"); if (!box) return;
+  S.pnlMode = mode || S.pnlMode;
+  const p = await api("/api/pnl?days=180" + (S.pnlMode ? "&mode=" + S.pnlMode : ""));
+  if (!$("#pnlPanel")) return;
+  const t = p.totals, who = member(p.member);
+  if (!p.days.length) {
+    box.innerHTML = `<div class="pnl"><b>💹 ${esc(who.name)}'s P&L</b><div class="hint" style="margin-top:4px">No profit and loss reported yet. Once ${esc(who.name)} is connected, his daily numbers show up here as a chart.</div></div>`;
+    return;
+  }
+  const last = t.last_day;
+  box.innerHTML = `<div class="pnl">
+    <div class="row"><b>💹 ${esc(who.name)}'s P&L</b><span class="tag">${p.mode === "live" ? "💵 Real money" : "📝 Paper (pretend) money"}</span><span class="grow"></span>
+      ${p.modes.length > 1 ? p.modes.map(m => `<button class="pill ${m === p.mode ? "on" : ""}" data-pnl-mode="${m}">${m === "live" ? "Real money" : "Paper"}</button>`).join("") : ""}</div>
+    <div class="tiles">
+      <div class="tile"><b>${pnlValue(t.total_usd)}</b><span>total P&L</span></div>
+      <div class="tile"><b>${pnlValue(last.pnl_usd)}</b><span>last report (${esc(last.day)})</span></div>
+      <div class="tile"><b>${t.days_traded}</b><span>days with trades</span></div>
+      <div class="tile"><b>${t.win_days} of ${t.days_traded}</b><span>winning days</span></div>
+    </div>
+    <div class="chart" id="pnlChart"></div>
+    <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">Show as table</summary>
+      <div class="tablewrap" style="margin-top:6px"><table><tr><th>Day</th><th>P&L</th><th>Total</th><th>Trades</th><th>Note</th></tr>
+      ${p.days.slice().reverse().map(d => `<tr><td>${esc(d.day)}</td><td>${pnlValue(d.pnl_usd)}</td><td>${usd(d.total_usd, false)}</td><td>${d.trades}</td><td class="hint">${esc(d.note || "")}</td></tr>`).join("")}</table></div></details>
+  </div>`;
+  $$("[data-pnl-mode]", box).forEach(b => b.onclick = () => loadPnl(b.dataset.pnlMode));
+  drawPnlChart($("#pnlChart"), p.days);
+}
+window.addEventListener("resize", () => {
+  clearTimeout(drawPnlChart.t);
+  drawPnlChart.t = setTimeout(() => { const el = $("#pnlChart"); if (el && el._days) drawPnlChart(el, el._days); }, 150);
+});
+function drawPnlChart(el, days) {
+  const W = Math.max(280, Math.round(el.clientWidth || 720)), H = 190, L = 64, R = 16, T = 12, B = 26;
+  el._days = days;
+  const vals = days.map(d => d.total_usd);
+  let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+  if (lo === hi) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const x = i => days.length === 1 ? (L + W - R) / 2 : L + i * (W - L - R) / (days.length - 1);
+  const y = v => T + (hi - v) * (H - T - B) / (hi - lo);
+  const ticks = [hi - pad, (hi + lo) / 2, lo + pad].concat(lo < 0 && hi > 0 ? [0] : []);
+  const path = days.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(d.total_usd).toFixed(1)}`).join("");
+  const lastI = days.length - 1;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" tabindex="0" role="img"
+      aria-label="Running total P&L over ${days.length} reported days, now ${usd(vals[lastI], false)}. Use the left and right arrow keys to read each day.">
+    ${[...new Set(ticks.map(v => Math.round(v * 100) / 100))].map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1" ${v === 0 ? "" : 'stroke-dasharray="2 4"'}/>
+      <text class="tick" x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${usd(v, false)}</text>`).join("")}
+    ${lo < 0 && hi > 0 ? `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--mut)" stroke-width="1"/>` : ""}
+    <path d="${path}" fill="none" stroke="var(--acc)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    <text class="tick" x="${L}" y="${H - 6}">${esc(days[0].day)}</text>
+    <text class="tick" x="${W - R}" y="${H - 6}" text-anchor="end">${esc(days[lastI].day)}</text>
+    <line id="pnlCross" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--mut)" stroke-width="1" vector-effect="non-scaling-stroke" visibility="hidden"/>
+    <circle id="pnlDot" r="4" fill="var(--acc)" stroke="var(--card)" stroke-width="2" visibility="hidden"/>
+    <circle cx="${x(lastI)}" cy="${y(vals[lastI])}" r="4" fill="var(--acc)" stroke="var(--card)" stroke-width="2"/>
+    <rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent" id="pnlHit"/>
+  </svg><div class="tip" id="pnlTip" hidden></div>`;
+  const svg = $("svg", el), cross = $("#pnlCross", el), dot = $("#pnlDot", el), tip = $("#pnlTip", el);
+  let cur = lastI;
+  const show = i => {
+    cur = Math.max(0, Math.min(lastI, i));
+    const d = days[cur], px = x(cur), py = y(d.total_usd);
+    cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", px); dot.setAttribute("cy", py); dot.setAttribute("visibility", "visible");
+    tip.textContent = "";
+    const b = document.createElement("b"); b.textContent = usd(d.total_usd, false) + " total";
+    const s1 = document.createElement("span"); s1.textContent = `${d.day} · day ${usd(d.pnl_usd)} · ${plural(d.trades, "trade")}`;
+    tip.append(b, s1);
+    if (d.note) { const s2 = document.createElement("span"); s2.textContent = d.note; tip.append(s2); }
+    tip.hidden = false;
+    const box = svg.getBoundingClientRect(), sx = px / W * box.width, sy = py / H * box.height;
+    tip.style.left = Math.min(Math.max(0, sx + 12), box.width - tip.offsetWidth) + "px";
+    tip.style.top = Math.max(0, sy - tip.offsetHeight - 10) + "px";
+  };
+  const hide = () => { cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); tip.hidden = true; };
+  svg.addEventListener("pointermove", e => {
+    const r = svg.getBoundingClientRect(), vx = (e.clientX - r.left) / r.width * W;
+    show(days.length === 1 ? 0 : Math.round((vx - L) / ((W - L - R) / (days.length - 1))));
+  });
+  svg.addEventListener("pointerleave", hide);
+  svg.addEventListener("focus", () => show(cur));
+  svg.addEventListener("blur", hide);
+  svg.addEventListener("keydown", e => {
+    if (e.key === "ArrowLeft") { e.preventDefault(); show(cur - 1); }
+    if (e.key === "ArrowRight") { e.preventDefault(); show(cur + 1); }
+  });
 }
 
 // ---------------------------------------------------------------- routines
@@ -1265,7 +1376,7 @@ async function refresh() {
     await Promise.all([loadCore(), loadSide()]);
     renderSide(); renderRight();
     const r = S.route;
-    if (r.view === "c") await loadFeed();
+    if (r.view === "c") { await loadFeed(); if (r.name === "trades") loadPnl(); }
     else if (r.view === "tasks") renderBoard();
     else if (r.view === "inbox") await loadInbox();
     else if (r.view === "memory") await loadMemory();

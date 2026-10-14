@@ -183,6 +183,18 @@ CREATE TABLE IF NOT EXISTS cloud_usage (
 );
 CREATE INDEX IF NOT EXISTS ix_cloud_usage ON cloud_usage(month, member);
 
+CREATE TABLE IF NOT EXISTS pnl (
+    member      TEXT NOT NULL,
+    day         TEXT NOT NULL,              -- YYYY-MM-DD
+    mode        TEXT NOT NULL,              -- paper | live
+    pnl_usd     REAL NOT NULL,              -- that day's profit (+) or loss (-)
+    equity_usd  REAL,                       -- account value at the end of the day (optional)
+    trades      INTEGER NOT NULL DEFAULT 0,
+    note        TEXT,
+    updated_at  REAL NOT NULL,
+    PRIMARY KEY (member, day, mode)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL

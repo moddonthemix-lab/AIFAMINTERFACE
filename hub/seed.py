@@ -129,6 +129,10 @@ def demo(hub):
         "details": "Look up what studios pay for backup and organisation today, and estimate a fair monthly price.",
         "assignee": "scholar", "priority": "low"})  # waits in the boss's inbox for approval
     boss = m("boss")
+    for text in ("Goal: build income from AI automation for small businesses.",
+                 "Interested in: audio production and helping artists manage their sessions.",
+                 "Learning: game development (Python now, Godot or Unity next) and safe cybersecurity practice."):
+        hub.propose_memory(boss, "interests", text, demo=True)
     hub.propose_memory(boss, "boss", "The boss prefers short answers with sources, in plain language.", demo=True)
     hub.propose_memory(boss, "decisions", "The Family Hub runs on the Chromebook; the agents and AI models run on the Mac.",
                        demo=True)

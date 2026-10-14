@@ -8,6 +8,7 @@ agent's personal memory stays inside the agent; this is only for shared facts.
 import time
 
 TOPICS = {
+    "interests": "Interests & goals",   # what agents should explore and work towards
     "boss": "About you",
     "projects": "Projects",
     "decisions": "Decisions",
@@ -53,7 +54,7 @@ class MemoryMixin:
         if q:
             sql += " AND text LIKE ?"
             args.append(f"%{q}%")
-        rows = self.q(sql + " ORDER BY topic, id DESC LIMIT 500", args)
+        rows = self.q(sql + " ORDER BY topic='interests' DESC, topic, id DESC LIMIT 500", args)
         return [self.memory_dict(r) for r in rows if self.can_see_memory(member, r)]
 
     def _check_memory_fields(self, member, topic, text, scope):

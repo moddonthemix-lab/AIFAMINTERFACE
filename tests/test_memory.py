@@ -78,6 +78,8 @@ def test_memory_api_and_client(api, tokens, server, tmp_path):
     s, r = api("POST", f"/api/memory/{p['id']}/approve", {"approve": True}, tokens["boss"])
     assert s == 200 and r["status"] == "active"
     assert c.memories(q="FTS5")[0]["id"] == p["id"]
+    api("POST", "/api/memory", {"topic": "interests", "text": "Learning Godot."}, tokens["boss"])
+    assert c.interests() == ["Learning Godot."]
     s, r = api("GET", "/api/memory?status=wrong", token=tokens["amo"])
     assert s == 400
     s, b = api("GET", "/api/brief", token=tokens["boss"])
@@ -87,7 +89,8 @@ def test_memory_api_and_client(api, tokens, server, tmp_path):
 def test_demo_memories_and_wipe(hub):
     seed.demo(hub)
     boss = hub.member("boss")
-    assert len(hub.memories(boss)) == 3
+    assert len(hub.memories(boss)) == 6
+    assert hub.memories(boss)[0]["topic"] == "interests"  # interests come first
     assert len(hub.memories(boss, status="proposed")) == 2
     assert hub.memories(hub.member("builder"), status="all") == [
         x for x in hub.memories(hub.member("builder"), status="all") if x["scope"] is None]

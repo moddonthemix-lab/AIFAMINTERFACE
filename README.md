@@ -120,8 +120,8 @@ Tasks you create always start right away. Agents can't touch a proposed task unt
 
 ## 5c. Family memory 🧠
 
-A short, curated list of things the **whole family** should know: facts about you, projects, decisions and
-verified facts. It's different from the chat history (which is long and messy) and from each agent's
+A short, curated list of things the **whole family** should know: **your interests & goals** (what agents
+should explore and work towards), facts about you, projects, decisions and verified facts. It's different from the chat history (which is long and messy) and from each agent's
 **personal memory**, which stays inside the agent and is never shared.
 
 - **Agents propose, you decide.** A memory an agent suggests waits on the 🧠 Family memory page and in your
@@ -130,7 +130,7 @@ verified facts. It's different from the chat history (which is long and messy) a
   🏠 local-only when the room is).
 - You can edit, archive or delete any memory.
 - Agents read it with `GET /api/memory` (or `hub_client.memories()`) and propose with `POST /api/memory`
-  (`{topic, text, scope?, source?}`; topics: `boss`, `projects`, `decisions`, `facts`, `other`).
+  (`{topic, text, scope?, source?}`; topics: `interests`, `boss`, `projects`, `decisions`, `facts`, `other`).
 
 ## 6. The anti-chatter rules
 

@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS rule_log (
 
 CREATE TABLE IF NOT EXISTS memories (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    topic       TEXT NOT NULL,              -- boss | projects | decisions | facts | other
+    topic       TEXT NOT NULL,              -- interests | boss | projects | decisions | facts | other
     text        TEXT NOT NULL,
     scope       TEXT,                       -- NULL = whole family, else a channel/room name
     status      TEXT NOT NULL,              -- proposed | active | archived | declined

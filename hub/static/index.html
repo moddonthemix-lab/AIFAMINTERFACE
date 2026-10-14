@@ -713,7 +713,7 @@ async function loadInbox() {
 }
 
 // ---------------------------------------------------------------- family memory
-const MEM_TOPICS = { boss: "👑 About you", projects: "📁 Projects", decisions: "✅ Decisions", facts: "🔎 Facts", other: "💡 Other" };
+const MEM_TOPICS = { interests: "🎯 Interests & goals", boss: "👑 About you", projects: "📁 Projects", decisions: "✅ Decisions", facts: "🔎 Facts", other: "💡 Other" };
 function memoryProposalHTML(mm) {
   return `<div class="banner" style="margin-bottom:8px">${avatar(mm.author, "sm")}<div class="grow"><b>🧠 ${esc(member(mm.author).name)} wants the family to remember:</b>
     <div>${esc(mm.text)}</div><div class="hint">${MEM_TOPICS[mm.topic] || mm.topic}${mm.scope ? " · 🔒 only in " + esc(mm.scope) : " · whole family"}</div></div>
@@ -732,7 +732,7 @@ async function viewMemory() {
     ${isBoss ? `<div class="section"><h2>Add a memory</h2><form id="memAdd" class="grid2">
       <label>Topic<select class="field" name="topic">${Object.entries(MEM_TOPICS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
       <label>Who can see it<select class="field" name="scope"><option value="">The whole family</option>${S.channels.filter(c => c.private).map(c => `<option value="${esc(c.name)}">🔒 only ${esc(c.name)}</option>`).join("")}</select></label>
-      <label style="grid-column:1/-1">What should they remember?<textarea class="field" name="text" rows="2" maxlength="1000" placeholder="One clear fact, e.g. “I'm saving for a new studio mic, budget $300.”"></textarea></label>
+      <label style="grid-column:1/-1">What should they remember?<textarea class="field" name="text" rows="2" maxlength="1000" placeholder="One clear thing, e.g. “Goal: earn $500/month from AI automation by summer.” or “Interested in: Godot game development.”"></textarea></label>
       <label>&nbsp;<button class="btn pri">Remember this</button></label></form></div>` : ""}`);
   $("#memPills").addEventListener("click", e => {
     const b = e.target.closest("[data-mtopic]"); if (!b) return;

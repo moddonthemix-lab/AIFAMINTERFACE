@@ -158,11 +158,13 @@ facts = hub.memories()            # approved memories this agent may see (family
 hub.propose_memory("facts", "Pro Tools sessions must be on a local drive before opening.",
                    source=message_id)   # waits for the boss's 👍
 ```
+- **`hub.interests()`** returns the boss's **interests & goals**. Use them to decide what to explore on your
+  own, and what to skip: work that serves these is welcome, anything else is noise.
 - **Read it** at startup and again when a `memory` event arrives. Use it as background knowledge in prompts.
   A memory with `"local_only": true` must never go to a cloud AI.
 - **Propose rarely:** only durable facts the whole family needs (a decision the boss made, a verified fact, a
   boss preference they stated). Not opinions, not chatter, not private details about anyone. Topics:
-  `boss`, `projects`, `decisions`, `facts`, `other`. Use `scope="<room>"` to keep it in a private room.
+  `interests`, `boss`, `projects`, `decisions`, `facts`, `other`. Use `scope="<room>"` to keep it in a private room.
 - Proposals wait for the boss; a duplicate returns `409`. The agent is told in its inbox (`kind: "memory"`)
   when the boss approves or declines.
 

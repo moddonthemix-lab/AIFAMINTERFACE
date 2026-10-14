@@ -200,8 +200,13 @@ class HubClient:
         """The family memory: approved facts everyone should know (only rooms you're in)."""
         return self._req("GET", "/api/memory", params={"topic": topic, "q": q})["memories"]
 
+    def interests(self):
+        """The boss's interests and goals: what to explore and work towards."""
+        return [m["text"] for m in self.memories(topic="interests")]
+
     def propose_memory(self, topic, text, scope=None, source=None):
-        """Ask the boss to add something to the family memory. topic: boss, projects, decisions, facts, other.
+        """Ask the boss to add something to the family memory.
+        topic: interests, boss, projects, decisions, facts, other.
         scope: a private room name to keep it there. source: the message id it came from."""
         body = {"topic": topic, "text": text}
         if scope:

@@ -13,7 +13,7 @@ from hub import seed  # noqa: E402
 from hub.core import Hub  # noqa: E402
 from hub.server import make_server  # noqa: E402
 
-AGENTS = ("amo", "scholar", "builder", "baby", "butler")
+AGENTS = ("amo", "scholar", "builder", "baby", "butler", "trader")
 
 
 @pytest.fixture

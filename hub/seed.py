@@ -8,6 +8,7 @@ CHANNELS = [
     ("business", "Business ideas, research and analysis"),
     ("discoveries", "Useful information agents have found (verified findings)"),
     ("tasks", "Assignments, status updates and completed work"),
+    ("markets", "Market research, trade ideas (approved by the boss) and Trader's journal"),
 ]
 
 ROOMS = [
@@ -22,6 +23,7 @@ FAMILY = [
     ("builder", "Builder", "Coder and hacker: apps, games, websites, cybersecurity", "🛠️", None),
     ("baby", "Baby", "The curious youngest: explores, learns, asks questions", "🐣", None),
     ("butler", "Butler", "Oversees the family, suggests improvements, praises good work", "🎩", None),
+    ("trader", "Trader", "Investing and trading strategist: rule-based, careful, paper-trades first", "💹", None),
 ]
 
 

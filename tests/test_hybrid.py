@@ -126,3 +126,16 @@ def test_autostart_files(monkeypatch, tmp_path):
     assert plist["EnvironmentVariables"]["HUB_HOST"] == "0.0.0.0" and plist["KeepAlive"] is True
     unit = autostart.systemd_unit(env)
     assert "-m hub serve" in unit and 'Environment="HUB_HOST=0.0.0.0"' in unit and "Restart=always" in unit
+
+
+# ---------------------------------------------------------------- brain tag
+def test_brain_tag(api, tokens, server, tmp_path):
+    s, m = api("POST", "/api/channels/general/messages",
+               {"type": "question", "text": "local?", "data": {"brain": "local"}}, tokens["amo"])
+    assert m["data"]["brain"] == "local"
+    assert api("POST", "/api/channels/general/messages",
+               {"type": "question", "text": "x?", "data": {"brain": "moon"}}, tokens["amo"])[0] == 400
+    c = HubClient(tokens["scholar"], server, outbox=tmp_path / "o.jsonl")
+    c.brain = "cloud"
+    f = c.post_finding("discoveries", "cloud fact", "reported", 0.5)
+    assert f["data"]["brain"] == "cloud"

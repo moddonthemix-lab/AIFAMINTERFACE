@@ -11,7 +11,7 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__, config
 from .core import HubError
@@ -272,7 +272,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _dispatch(self, method):
         url = urlparse(self.path)
-        path = url.path.rstrip("/") or "/"
+        path = unquote(url.path).rstrip("/") or "/"  # e.g. scholar%2Bbaby -> scholar+baby
         query = {k: v[-1] for k, v in parse_qs(url.query).items()}
         try:
             if method == "GET" and path in ("/", "/index.html"):

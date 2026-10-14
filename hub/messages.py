@@ -13,6 +13,7 @@ UPDATE_STATUSES = ("accepted", "in_progress", "blocked", "done", "declined")
 FINDING_STATUSES = ("verified", "reported", "assumption", "disputed")
 VERDICTS = ("praise", "suggestion", "concern")
 PRIORITIES = ("low", "normal", "high")
+BRAINS = ("local", "cloud")
 
 # Fields each type may carry in `data`. Anything else is dropped.
 FIELDS = {
@@ -98,6 +99,7 @@ def validate(type_, text, data, max_text=4000):
         data = {}
     if not isinstance(data, dict):
         raise ValidationError("'data' must be an object")
+    brain = data.get("brain")
     data = {k: v for k, v in data.items() if k in FIELDS[type_]}
     out = {}
 
@@ -156,6 +158,9 @@ def validate(type_, text, data, max_text=4000):
         out["verdict"] = _choice(data.get("verdict"), "verdict", VERDICTS)
         text = _text(text, "text", max_text)
 
+    # Optional on every type: which brain wrote it, "local" (Ollama) or "cloud".
+    if brain is not None:
+        out["brain"] = _choice(brain, "brain", BRAINS)
     if len(json.dumps(out)) > MAX_DATA_BYTES:
         raise ValidationError("the message data is too large")
     return text, out

@@ -15,7 +15,7 @@ import json
 import time
 
 DEFAULTS = {
-    "rate_per_minute": 6,       # messages per agent per minute
+    "rate_per_minute": 10,      # messages per agent per minute
     "rate_per_day": 300,        # messages per agent per day
     "free_posts_per_day": 5,    # plain posts allowed outside a question/task thread
     "loop_limit": 6,            # agent messages in a row in one thread without progress

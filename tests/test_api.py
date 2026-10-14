@@ -188,3 +188,11 @@ def test_admin_is_boss_only(api, tokens):
     assert api("GET", "/api/me", token=r3["token"])[0] == 200
     assert api("DELETE", "/api/admin/agents/scout", None, tokens["boss"])[0] == 200
     assert api("GET", "/api/me", token=r3["token"])[0] == 401
+
+
+def test_room_names_with_plus_work_when_url_encoded(api, tokens):
+    s, m = api("POST", "/api/channels/scholar%2Bbaby/messages", {"type": "question", "text": "encoded?"},
+               tokens["baby"])
+    assert s == 200 and m["channel"] == "scholar+baby"
+    s, r = api("GET", "/api/channels/scholar%2Bbaby/messages", token=tokens["scholar"])
+    assert s == 200 and r["messages"][-1]["text"] == "encoded?"

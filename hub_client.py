@@ -53,6 +53,7 @@ class HubClient:
         self.timeout = timeout
         self.last_event = None
         self.rejected = []  # queued messages the hub refused when they were finally sent
+        self.brain = None   # set to "local" or "cloud" before posting to tag messages with 🏠 / ☁️
         self._lock = threading.Lock()
         if outbox is False:
             self.outbox_path = None
@@ -86,7 +87,9 @@ class HubClient:
             raise HubOffline(f"can't reach the hub at {self.url}: {e}") from None
 
     def _send(self, channel, type_, text=None, data=None, reply_to=None):
-        body = {"type": type_, "data": data or {}}
+        body = {"type": type_, "data": dict(data or {})}
+        if self.brain:
+            body["data"]["brain"] = self.brain
         if text is not None:
             body["text"] = text
         if reply_to is not None:
@@ -203,10 +206,14 @@ class HubClient:
     def ask(self, channel, text, to=None, reply_to=None):
         return self._send(channel, "question", text, {"to": to} if to else {}, reply_to)
 
-    def request_task(self, channel, title, details, assignee, priority="normal", due=None, reply_to=None):
+    def request_task(self, channel, title, details, assignee, priority="normal", due=None, reply_to=None,
+                     parent_task=None):
+        """parent_task: the id of a task you're working on, if this is a step of it (starts without approval)."""
         data = {"title": title, "details": details, "assignee": assignee, "priority": priority}
         if due:
             data["due"] = due
+        if parent_task is not None:
+            data["parent_task"] = parent_task
         return self._send(channel, "task_request", data=data, reply_to=reply_to)
 
     def update_task(self, task_id, status, note=""):

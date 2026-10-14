@@ -507,7 +507,7 @@ function cardHTML(m, { inThread = false } = {}) {
   return `<article class="card ${m.author === "boss" ? "mine" : ""}" data-id="${m.id}">
     ${avatar(m.author, inThread ? "sm" : "")}
     <div class="body">
-      <div class="meta"><b>${esc(a.name)}</b><span class="role">${esc(a.kind === "boss" ? "Boss" : a.role.split(":")[0])}</span><span class="time" title="${new Date(m.created_at * 1000).toLocaleString()}">${when(m.created_at)}</span></div>
+      <div class="meta"><b>${esc(a.name)}</b><span class="role">${esc(a.kind === "boss" ? "Boss" : a.role.split(":")[0])}</span><span class="time" title="${new Date(m.created_at * 1000).toLocaleString()}">${when(m.created_at)}</span>${d.brain ? `<span class="time" title="${d.brain === "cloud" ? "Written with cloud AI" : "Written with local AI on your own machine"}">${d.brain === "cloud" ? "☁️ cloud" : "🏠 local"}</span>` : ""}</div>
       ${content}
       ${inThread ? "" : `<div class="foot"><span class="tag type-${m.type}">${TYPE_LABEL[m.type]}</span>${m.demo ? '<span class="tag">demo</span>' : ""}${m.paused ? '<span class="paused-flag">⏸ paused, needs you</span>' : ""}
         <button class="replies ${replies ? "has" : ""}" data-thread="${m.id}">💬 ${replies ? plural(replies, "reply") : "Reply"}</button></div>`}

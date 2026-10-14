@@ -116,6 +116,20 @@ CREATE TABLE IF NOT EXISTS rule_log (
     created_at  REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS memories (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic       TEXT NOT NULL,              -- boss | projects | decisions | facts | other
+    text        TEXT NOT NULL,
+    scope       TEXT,                       -- NULL = whole family, else a channel/room name
+    status      TEXT NOT NULL,              -- proposed | active | archived | declined
+    author      TEXT NOT NULL,
+    source_id   INTEGER,                    -- message it came from, if any
+    created_at  REAL NOT NULL,
+    updated_at  REAL NOT NULL,
+    demo        INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_memories_status ON memories(status, topic);
+
 CREATE TABLE IF NOT EXISTS settings (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL
@@ -137,6 +151,7 @@ MIGRATIONS = [
     ("channels", "local_only", "INTEGER NOT NULL DEFAULT 0"),   # 1 = agents must not send it to cloud AI
     ("messages", "client_id", "TEXT"),                          # sender's id for safe re-sending
     ("members", "task_autonomy", "TEXT NOT NULL DEFAULT 'ask'"),  # ask | free | strict (see core.AUTONOMY)
+    ("inbox", "memory_id", "INTEGER"),                          # a family-memory item this is about
 ]
 
 

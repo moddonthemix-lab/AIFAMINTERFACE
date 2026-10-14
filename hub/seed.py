@@ -56,6 +56,8 @@ def wipe_demo(hub):
             # System notes inside demo threads go too.
             c.execute(f"DELETE FROM messages WHERE reply_to IN ({marks})", ids)
         c.execute("DELETE FROM tasks WHERE demo=1")
+        c.execute("DELETE FROM inbox WHERE memory_id IN (SELECT id FROM memories WHERE demo=1)")
+        c.execute("DELETE FROM memories WHERE demo=1")
         c.execute("DELETE FROM messages WHERE demo=1")
         hub._event(c, "channel", {"wiped_demo": True})
     return len(ids)
@@ -126,6 +128,16 @@ def demo(hub):
         "title": "Price a session-backup service for small studios",
         "details": "Look up what studios pay for backup and organisation today, and estimate a fair monthly price.",
         "assignee": "scholar", "priority": "low"})  # waits in the boss's inbox for approval
+    boss = m("boss")
+    hub.propose_memory(boss, "boss", "The boss prefers short answers with sources, in plain language.", demo=True)
+    hub.propose_memory(boss, "decisions", "The Family Hub runs on the Chromebook; the agents and AI models run on the Mac.",
+                       demo=True)
+    hub.propose_memory(boss, "projects", "Audio file-sharing for artists: per-artist folders tested and working.",
+                       source=t1["id"], demo=True)
+    hub.propose_memory(m("scholar"), "facts", "Pro Tools sessions should be copied to a local drive before opening.",
+                       demo=True)  # waits for the boss's approval
+    hub.propose_memory(m("scholar"), "other", "Baby learns best from one small example at a time.",
+                       scope="scholar+baby", demo=True)
     q = say("baby", "scholar+baby", "question",
             "Scholar, what's the difference between a verified finding and a reported one?", {"to": "scholar"})
     say("scholar", "scholar+baby", "post",

@@ -112,6 +112,36 @@ def post_task_approve(h, me, q, body, tid):
     return h.hub.decide_task(me, int(tid), bool(body.get("approve", True)), body.get("note") or "")
 
 
+@route("GET", "/api/memory")
+def get_memory(h, me, q, body):
+    from .memory import TOPICS
+    status = q.get("status") or "active"
+    if status not in ("active", "proposed", "archived", "declined", "all"):
+        raise HubError(400, "status must be active, proposed, archived, declined or all")
+    return {"memories": h.hub.memories(me, q.get("topic"), q.get("q"), status), "topics": TOPICS}
+
+
+@route("POST", "/api/memory")
+def post_memory(h, me, q, body):
+    return h.hub.propose_memory(me, body.get("topic"), body.get("text"), body.get("scope"), body.get("source"))
+
+
+@route("POST", r"/api/memory/(?P<mid>\d+)/approve", auth="boss")
+def post_memory_approve(h, me, q, body, mid):
+    return h.hub.decide_memory(me, int(mid), bool(body.get("approve", True)), body.get("text"), body.get("topic"))
+
+
+@route("POST", r"/api/memory/(?P<mid>\d+)", auth="boss")
+def post_memory_edit(h, me, q, body, mid):
+    return h.hub.update_memory(me, int(mid), body.get("text"), body.get("topic"), body.get("scope"), body.get("status"))
+
+
+@route("DELETE", r"/api/memory/(?P<mid>\d+)", auth="boss")
+def delete_memory(h, me, q, body, mid):
+    h.hub.delete_memory(me, int(mid))
+    return {"ok": True}
+
+
 @route("GET", "/api/inbox")
 def get_inbox(h, me, q, body):
     return {"items": h.hub.inbox(me, unread_only=q.get("unread") == "1"), "unread": h.hub.unread_count(me)}

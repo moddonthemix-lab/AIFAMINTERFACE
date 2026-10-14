@@ -196,6 +196,20 @@ class HubClient:
     def search(self, q):
         return self._req("GET", "/api/search", params={"q": q})["messages"]
 
+    def memories(self, topic=None, q=None):
+        """The family memory: approved facts everyone should know (only rooms you're in)."""
+        return self._req("GET", "/api/memory", params={"topic": topic, "q": q})["memories"]
+
+    def propose_memory(self, topic, text, scope=None, source=None):
+        """Ask the boss to add something to the family memory. topic: boss, projects, decisions, facts, other.
+        scope: a private room name to keep it there. source: the message id it came from."""
+        body = {"topic": topic, "text": text}
+        if scope:
+            body["scope"] = scope
+        if source is not None:
+            body["source"] = source
+        return self._write("/api/memory", body)
+
     def brief(self):
         return self._req("GET", "/api/brief")
 

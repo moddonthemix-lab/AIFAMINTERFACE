@@ -50,6 +50,7 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .app { display: grid; grid-template-columns: 240px minmax(0, 1fr) 320px; height: calc(100vh - 60px); height: calc(100dvh - 60px); }
 #side { overflow-y: auto; padding: 14px 10px 24px; border-right: 1px solid var(--line); background: var(--card); }
 #main { overflow-y: auto; min-width: 0; display: flex; flex-direction: column; }
+#main > * { flex-shrink: 0; }
 #right { overflow-y: auto; padding: 16px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; }
 
 /* ---------- sidebar ---------- */
@@ -387,6 +388,7 @@ async function loadCore() {
   if (S.last === null) S.last = me.last_event;
   S.memberList = mem.members; S.members = Object.fromEntries(mem.members.map(m => [m.id, m]));
   S.channels = ch.channels; S.tasks = tasks.tasks;
+  S.memPending = S.me.kind === "boss" ? (await api("/api/memory?status=proposed")).memories : [];
 }
 async function loadSide() {
   const [act, stats] = await Promise.all([api("/api/activity?limit=8"), api("/api/stats")]);
@@ -412,6 +414,7 @@ function renderSide() {
   $("#side").innerHTML = `
     ${navItem("#/tasks", "📋", "Tasks board", r.view === "tasks", open)}
     ${navItem("#/inbox", "📥", "Inbox", r.view === "inbox", S.unread, S.unread > 0)}
+    ${navItem("#/memory", "🧠", "Family memory", r.view === "memory", (S.memPending || []).length, (S.memPending || []).length > 0)}
     ${isBoss ? navItem("#/admin", "🛡️", "Admin", r.view === "admin") : ""}
     <div class="side-h">Channels</div>${pub.map(chItem).join("")}
     ${priv.length ? `<div class="side-h">Private rooms</div>${priv.map(chItem).join("")}` : ""}
@@ -683,7 +686,9 @@ async function loadInbox() {
   if (S.route.view !== "inbox") return;
   const paused = ov ? ov.paused_threads : [], pausedAgents = ov ? ov.members.filter(m => m.paused) : [];
   const proposals = isBoss ? S.tasks.filter(t => t.status === "proposed") : [];
-  $("#needs").innerHTML = paused.length || pausedAgents.length || proposals.length ? `<div class="section"><h2>⏳ Waiting for you</h2>
+  const memProps = isBoss ? (S.memPending || []) : [];
+  $("#needs").innerHTML = paused.length || pausedAgents.length || proposals.length || memProps.length ? `<div class="section"><h2>⏳ Waiting for you</h2>
+    ${memProps.map(memoryProposalHTML).join("")}
     ${proposals.map(t => `<div class="banner" style="margin-bottom:8px">${avatar(t.requester, "sm")}<div class="grow"><b>${esc(member(t.requester).name)} proposes: ${esc(t.title)}</b>
       <div class="hint">for ${esc(member(t.assignee).name)} · #${esc(t.channel)}</div><div class="snip">${esc(t.details.slice(0, 160))}</div></div>
       <button class="btn sm" data-thread="${t.message_id}">Open</button><button class="btn sm pri" data-approve="${t.id}">👍 Approve</button><button class="btn sm" data-decline="${t.id}">👎</button></div>`).join("")}
@@ -692,12 +697,78 @@ async function loadInbox() {
     ${pausedAgents.map(m => `<div class="banner" style="margin-bottom:8px"><div class="grow"><b>${esc(m.emoji)} ${esc(m.name)} is paused</b></div><button class="btn sm pri" data-agent-unpause="${m.id}">Unpause</button></div>`).join("")}</div>` : "";
   const items = inbox.items;
   $("#inboxList").innerHTML = items.length ? items.map(i => {
-    const m = i.message, who = m ? m.author : i.task.requester;
+    const m = i.message, mm = i.memory;
+    if (!m && !i.task && mm) {
+      return `<div class="item ${i.read ? "" : "unread"}" data-inbox="${i.id}" data-goto="#/memory">
+        ${avatar(mm.author, "sm")}<div class="grow"><div class="row"><b>${esc(member(mm.author).name)}</b><span class="tag">🧠 Memory</span>
+        <span class="grow"></span><span class="hint">${ago(i.created_at)}</span></div>
+        <div class="snip">${i.note ? esc(i.note) + " · " : ""}${esc(mm.text)}</div></div></div>`;
+    }
+    const who = m ? m.author : i.task.requester;
     return `<div class="item ${i.read ? "" : "unread"}" data-inbox="${i.id}" data-thread="${m ? (m.reply_to || m.id) : i.task.message_id}">
       ${avatar(who, "sm")}<div class="grow"><div class="row"><b>${esc(member(who).name)}</b><span class="tag">${INBOX_LABEL[i.kind] || i.kind}</span>
       ${m ? `<span class="hint">#${esc(m.channel)}</span>` : ""}<span class="grow"></span><span class="hint">${ago(i.created_at)}</span></div>
       <div class="snip">${i.note ? esc(i.note) + " · " : ""}${m ? esc(m.text) : esc(i.task.title)}</div></div></div>`;
   }).join("") : '<div class="empty">All caught up. ✨</div>';
+}
+
+// ---------------------------------------------------------------- family memory
+const MEM_TOPICS = { boss: "👑 About you", projects: "📁 Projects", decisions: "✅ Decisions", facts: "🔎 Facts", other: "💡 Other" };
+function memoryProposalHTML(mm) {
+  return `<div class="banner" style="margin-bottom:8px">${avatar(mm.author, "sm")}<div class="grow"><b>🧠 ${esc(member(mm.author).name)} wants the family to remember:</b>
+    <div>${esc(mm.text)}</div><div class="hint">${MEM_TOPICS[mm.topic] || mm.topic}${mm.scope ? " · 🔒 only in " + esc(mm.scope) : " · whole family"}</div></div>
+    <button class="btn sm pri" data-mem-approve="${mm.id}">👍 Remember</button><button class="btn sm" data-mem-edit-approve="${mm.id}">Edit</button><button class="btn sm" data-mem-decline="${mm.id}">👎</button></div>`;
+}
+async function viewMemory() {
+  const isBoss = S.me.kind === "boss";
+  S.memTopic = S.memTopic || "all";
+  setHeader(`
+    <div class="view-head"><span class="hico">🧠</span><div class="grow"><h1>Family memory</h1>
+      <p>Things the whole family should know. Agents can suggest memories; only you make them official. Each agent's personal memory stays inside the agent.</p></div></div>
+    <div id="memPending"></div>
+    <div class="pills" id="memPills">${[["all", "All"], ...Object.entries(MEM_TOPICS)].map(([k, l]) => `<button class="pill ${S.memTopic === k ? "on" : ""}" data-mtopic="${k}">${l}</button>`).join("")}
+      ${isBoss ? `<button class="pill ${S.memTopic === "archived" ? "on" : ""}" data-mtopic="archived">🗄️ Archived</button>` : ""}</div>
+    <div class="list" id="memList"><div class="empty">Loading…</div></div>
+    ${isBoss ? `<div class="section"><h2>Add a memory</h2><form id="memAdd" class="grid2">
+      <label>Topic<select class="field" name="topic">${Object.entries(MEM_TOPICS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+      <label>Who can see it<select class="field" name="scope"><option value="">The whole family</option>${S.channels.filter(c => c.private).map(c => `<option value="${esc(c.name)}">🔒 only ${esc(c.name)}</option>`).join("")}</select></label>
+      <label style="grid-column:1/-1">What should they remember?<textarea class="field" name="text" rows="2" maxlength="1000" placeholder="One clear fact, e.g. “I'm saving for a new studio mic, budget $300.”"></textarea></label>
+      <label>&nbsp;<button class="btn pri">Remember this</button></label></form></div>` : ""}`);
+  $("#memPills").addEventListener("click", e => {
+    const b = e.target.closest("[data-mtopic]"); if (!b) return;
+    S.memTopic = b.dataset.mtopic; $$("#memPills .pill").forEach(p => p.classList.toggle("on", p === b)); loadMemory();
+  });
+  if ($("#memAdd")) $("#memAdd").onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target.elements;
+    try {
+      await api("/api/memory", { method: "POST", body: { topic: f.topic.value, text: f.text.value, scope: f.scope.value || undefined } });
+      f.text.value = ""; toast("Remembered 🧠"); refreshSoon(10);
+    } catch (x) { toast(x.message, true); }
+  };
+  await loadMemory();
+}
+async function loadMemory() {
+  if (!$("#memList")) return;
+  const archived = S.memTopic === "archived";
+  const r = await api(`/api/memory?status=${archived ? "archived" : "active"}${!archived && S.memTopic !== "all" ? "&topic=" + S.memTopic : ""}`);
+  if (S.route.view !== "memory") return;
+  S.memories = r.memories;
+  const isBoss = S.me.kind === "boss";
+  $("#memPending").innerHTML = (S.memPending || []).length ? `<div class="section"><h2>⏳ Waiting for your OK</h2>${S.memPending.map(memoryProposalHTML).join("")}</div>` : "";
+  const groups = {};
+  r.memories.forEach(mm => (groups[mm.topic] = groups[mm.topic] || []).push(mm));
+  $("#memList").innerHTML = r.memories.length ? Object.keys(MEM_TOPICS).filter(k => groups[k]).map(k => `
+    <h2 style="font-size:14px;margin:8px 0 2px;color:var(--mut)">${MEM_TOPICS[k]}</h2>
+    ${groups[k].map(mm => `<div class="item" style="cursor:default">${avatar(mm.author, "sm")}<div class="grow">
+      <div>${fmt(mm.text)}</div>
+      <div class="row hint" style="margin-top:4px"><span>${esc(member(mm.author).name)} · ${ago(mm.updated_at)}</span>
+        ${mm.scope ? `<span class="tag">🔒 ${esc(mm.scope)}</span>` : ""}${mm.source_id ? `<a href="#" data-thread="${mm.source_id}">source</a>` : ""}${mm.demo ? '<span class="tag">demo</span>' : ""}
+        <span class="grow"></span>
+        ${isBoss ? `<button class="btn sm" data-mem-edit="${mm.id}">Edit</button>
+          <button class="btn sm" data-mem-archive="${mm.id}" data-mem-archive-to="${archived ? "active" : "archived"}">${archived ? "Restore" : "Archive"}</button>
+          <button class="btn sm danger" data-mem-delete="${mm.id}">Delete</button>` : ""}</div></div></div>`).join("")}`).join("")
+    : `<div class="empty">${archived ? "Nothing archived." : "Nothing remembered here yet."}</div>`;
 }
 
 async function viewSearch(q) {
@@ -783,7 +854,7 @@ function renderAdminParts(ov) {
   $("#ruleLog").innerHTML = ov.rule_log.length ? `<table><tr><th>When</th><th>Who</th><th>Rule</th><th>Detail</th></tr>${ov.rule_log.map(r => `<tr><td class="hint">${ago(r.created_at)}</td><td>${esc(r.member)}</td><td>${esc(r.rule)}</td><td>${esc(r.detail)}</td></tr>`).join("")}</table>` : '<div class="hint">No rule violations. The family is behaving. 🎩</div>';
 }
 document.addEventListener("click", async e => {
-  const b = e.target.closest("button, [data-thread]");
+  const b = e.target.closest("button, [data-thread], [data-goto]");
   if (!b) return;
   const d = b.dataset;
   try {
@@ -799,6 +870,29 @@ document.addEventListener("click", async e => {
       await api(`/api/admin/agents/${d.remove}`, { method: "DELETE" }); refreshSoon(10);
     } else if (d.roomRemove) {
       await api(`/api/admin/channels/${encodeURIComponent(d.roomRemove)}/members`, { method: "POST", body: { remove: [d.who] } }); refreshSoon(10);
+    } else if (d.goto) {
+      if (d.inbox) api("/api/inbox/read", { method: "POST", body: { ids: [+d.inbox] } }).then(() => refreshSoon(10));
+      location.hash = d.goto;
+    } else if (d.memApprove || d.memDecline) {
+      const id = +(d.memApprove || d.memDecline);
+      await api(`/api/memory/${id}/approve`, { method: "POST", body: { approve: !!d.memApprove } });
+      toast(d.memApprove ? "Remembered 🧠" : "Declined"); refreshSoon(10);
+    } else if (d.memEditApprove) {
+      const mm = (S.memPending || []).find(x => x.id === +d.memEditApprove);
+      const text = prompt("Edit the memory, then it's approved:", mm ? mm.text : "");
+      if (!text) return;
+      await api(`/api/memory/${d.memEditApprove}/approve`, { method: "POST", body: { approve: true, text } });
+      toast("Remembered 🧠"); refreshSoon(10);
+    } else if (d.memEdit) {
+      const cur = (S.memories || []).find(x => x.id === +d.memEdit);
+      const text = prompt("Edit this memory:", cur ? cur.text : "");
+      if (!text) return;
+      await api(`/api/memory/${d.memEdit}`, { method: "POST", body: { text } }); refreshSoon(10);
+    } else if (d.memArchive) {
+      await api(`/api/memory/${d.memArchive}`, { method: "POST", body: { status: d.memArchiveTo } }); refreshSoon(10);
+    } else if (d.memDelete) {
+      if (!confirm("Delete this memory for good?")) return;
+      await api(`/api/memory/${d.memDelete}`, { method: "DELETE" }); refreshSoon(10);
     } else if (d.approve || d.decline) {
       const id = +(d.approve || d.decline);
       await api(`/api/tasks/${id}/approve`, { method: "POST", body: { approve: !!d.approve } });
@@ -874,7 +968,7 @@ function parseRoute() {
   const [view, ...rest] = h.split("/");
   const arg = decodeURIComponent(rest.join("/"));
   if (view === "c" && arg) return { view: "c", name: arg };
-  if (["tasks", "inbox", "admin"].includes(view)) return { view };
+  if (["tasks", "inbox", "admin", "memory"].includes(view)) return { view };
   if (view === "search" && arg) return { view: "search", q: arg };
   return { view: "c", name: "general" };
 }
@@ -889,6 +983,7 @@ async function route() {
     else if (r.view === "tasks") viewTasks();
     else if (r.view === "inbox") await viewInbox();
     else if (r.view === "admin") await viewAdmin();
+    else if (r.view === "memory") await viewMemory();
     else if (r.view === "search") await viewSearch(r.q);
   } catch (x) { if (x.status !== 401) setHeader(`<div class="empty">${esc(x.message)}</div>`); }
 }
@@ -910,6 +1005,7 @@ async function refresh() {
     if (r.view === "c") await loadFeed();
     else if (r.view === "tasks") renderBoard();
     else if (r.view === "inbox") await loadInbox();
+    else if (r.view === "memory") await loadMemory();
     else if (r.view === "admin") renderAdminParts(await api("/api/admin/overview"));
     if (S.thread) await loadThread();
   } catch (x) { if (x.status !== 401) console.warn(x); }

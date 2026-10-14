@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 from . import db, rules
+from .memory import MemoryMixin
 from .messages import TASK_STATUSES, ValidationError, parse_target, validate
 
 ONLINE_SEC = 120
@@ -55,7 +56,7 @@ def _loads(s):
     return json.loads(s) if s else {}
 
 
-class Hub:
+class Hub(MemoryMixin):
     def __init__(self, home):
         self.home = Path(home).expanduser()
         self.home.mkdir(parents=True, exist_ok=True)
@@ -642,9 +643,10 @@ class Hub:
                     msg["task"] = self.task_dict(self._task(msg.get("task_id") or task["id"]))
         return msg
 
-    def _inbox(self, c, member_id, kind, message_id=None, task_id=None, note=None, demo=False):
-        cur = c.execute("INSERT INTO inbox(member, kind, message_id, task_id, note, created_at, demo) "
-                        "VALUES (?,?,?,?,?,?,?)", (member_id, kind, message_id, task_id, note, time.time(), int(demo)))
+    def _inbox(self, c, member_id, kind, message_id=None, task_id=None, note=None, demo=False, memory_id=None):
+        cur = c.execute("INSERT INTO inbox(member, kind, message_id, task_id, note, created_at, demo, memory_id) "
+                        "VALUES (?,?,?,?,?,?,?,?)",
+                        (member_id, kind, message_id, task_id, note, time.time(), int(demo), memory_id))
         self._event(c, "inbox", {"id": cur.lastrowid, "kind": kind}, member=member_id)
 
     def system_note(self, c, channel, text, reply_to=None):
@@ -784,7 +786,7 @@ class Hub:
         out = []
         for r in self.q(sql + " ORDER BY id DESC LIMIT ?", (member["id"], limit)):
             item = {"id": r["id"], "kind": r["kind"], "note": r["note"], "read": bool(r["read"]),
-                    "created_at": r["created_at"], "message": None, "task": None}
+                    "created_at": r["created_at"], "message": None, "task": None, "memory": None}
             if r["message_id"]:
                 m = self.message(r["message_id"])
                 if m is not None and self.can_see(member, self.channel(m["channel"])):
@@ -793,7 +795,11 @@ class Hub:
                 t = self._task(r["task_id"])
                 if t is not None:
                     item["task"] = self.task_dict(t)
-            if item["message"] is None and item["task"] is None:
+            if r["memory_id"]:
+                mem = self.q1("SELECT * FROM memories WHERE id=?", (r["memory_id"],))
+                if mem is not None and self.can_see_memory(member, mem):
+                    item["memory"] = self.memory_dict(mem)
+            if item["message"] is None and item["task"] is None and item["memory"] is None:
                 continue
             out.append(item)
         return out
@@ -833,7 +839,8 @@ class Hub:
         out = {
             "me": member["id"],
             "unread": self.unread_count(member),
-            "approve": self.q1("SELECT COUNT(*) FROM tasks WHERE status='proposed'")[0]
+            "approve": self.q1("SELECT (SELECT COUNT(*) FROM tasks WHERE status='proposed') + "
+                               "(SELECT COUNT(*) FROM memories WHERE status='proposed')")[0]
             if member["kind"] == "boss" else 0,
             "open": open_n,
             "blocked": self.q1("SELECT COUNT(*) FROM tasks WHERE status='blocked'")[0],

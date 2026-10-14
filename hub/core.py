@@ -20,6 +20,7 @@ from .memory import MemoryMixin
 from .routines import RoutinesMixin
 from .backup import BackupMixin
 from .files import FilesMixin
+from .budget import BudgetMixin
 from .messages import TASK_STATUSES, ValidationError, parse_target, validate
 
 ONLINE_SEC = 120
@@ -59,7 +60,7 @@ def _loads(s):
     return json.loads(s) if s else {}
 
 
-class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin):
+class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin):
     def __init__(self, home):
         self.home = Path(home).expanduser()
         self.home.mkdir(parents=True, exist_ok=True)
@@ -172,7 +173,7 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin):
             "id": m["id"], "name": m["name"], "role": m["role"], "emoji": m["emoji"], "kind": m["kind"],
             "card_url": m["card_url"], "status": self.presence(m["last_seen"], now),
             "last_seen": m["last_seen"], "paused": bool(m["paused"]), "has_token": bool(m["token_hash"]),
-            "task_autonomy": m["task_autonomy"],
+            "task_autonomy": m["task_autonomy"], "cloud_budget_usd": m["cloud_budget_usd"],
         }
 
     def members(self):
@@ -844,8 +845,9 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin):
                 mem = self.q1("SELECT * FROM memories WHERE id=?", (r["memory_id"],))
                 if mem is not None and self.can_see_memory(member, mem):
                     item["memory"] = self.memory_dict(mem)
-            if item["message"] is None and item["task"] is None and item["memory"] is None:
-                continue
+            has_ref = r["message_id"] or r["task_id"] or r["memory_id"]
+            if has_ref and item["message"] is None and item["task"] is None and item["memory"] is None:
+                continue  # it points at something this member can no longer see
             out.append(item)
         return out
 
@@ -956,6 +958,7 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin):
             "loved": loved[:10],
             "questions": msgs("type='question'", limit=10),
             "upcoming": upcoming[:10],
+            "cloud": self.budget_status(member),
             "counts": {"findings": len(findings), "done": len(done), "new_tasks": len(new),
                        "messages": sum(a["messages"] for a in active.values())},
         }

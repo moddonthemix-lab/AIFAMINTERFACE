@@ -211,6 +211,9 @@ textarea.field { width: 100%; resize: vertical; }
 .tile { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
 .tile b { display: block; font-size: 26px; line-height: 1.1; }
 .tile span { color: var(--mut); font-size: 12.5px; }
+.bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; min-width: 80px; }
+.bar i { display: block; height: 100%; background: var(--good); }
+.bar i.warn { background: var(--warn); } .bar i.bad { background: var(--bad); }
 .list { display: flex; flex-direction: column; gap: 8px; padding: 0 22px 22px; }
 .item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); cursor: pointer; }
 .item.unread { border-left: 3px solid var(--acc); }
@@ -319,7 +322,7 @@ const STATUS_LABEL = { proposed: "Needs your OK", open: "Open", accepted: "Accep
 const FINDING_LABEL = { verified: "Verified", reported: "Reported", assumption: "Assumption", disputed: "Disputed" };
 const VERDICT_LABEL = { praise: "👏 Praise", suggestion: "💡 Suggestion", concern: "⚠️ Concern" };
 const AUTONOMY = { ask: "Ask me for its own ideas", free: "Free: starts tasks itself", strict: "Strict: always ask me" };
-const INBOX_LABEL = { feedback: "Feedback", memory: "Memory", approval: "Needs approval", mention: "Mention", assignment: "New task", reply: "Reply", task: "Task update", review: "Review", needs_boss: "Needs you" };
+const INBOX_LABEL = { budget: "☁️ Budget", feedback: "Feedback", memory: "Memory", approval: "Needs approval", mention: "Mention", assignment: "New task", reply: "Reply", task: "Task update", review: "Review", needs_boss: "Needs you" };
 const FILTERS = [["all", "All"], ["question", "Questions"], ["task", "Tasks"], ["finding", "Findings"], ["review", "Reviews"], ["post", "Posts"]];
 
 let TOKEN = store.get("hubToken");
@@ -775,6 +778,11 @@ async function loadInbox() {
   const items = inbox.items;
   $("#inboxList").innerHTML = items.length ? items.map(i => {
     const m = i.message, mm = i.memory;
+    if (!m && !i.task && !mm) {
+      return `<div class="item ${i.read ? "" : "unread"}" data-inbox="${i.id}" data-goto="${i.kind === "budget" ? "#/admin" : "#/today"}">
+        <span class="av sm">${i.kind === "budget" ? "☁️" : "🔔"}</span><div class="grow"><div class="row"><span class="tag">${INBOX_LABEL[i.kind] || i.kind}</span>
+        <span class="grow"></span><span class="hint">${ago(i.created_at)}</span></div><div class="snip">${esc(i.note || "")}</div></div></div>`;
+    }
     if (!m && !i.task && mm) {
       return `<div class="item ${i.read ? "" : "unread"}" data-inbox="${i.id}" data-goto="#/memory">
         ${avatar(mm.author, "sm")}<div class="grow"><div class="row"><b>${esc(member(mm.author).name)}</b><span class="tag">🧠 Memory</span>
@@ -891,8 +899,22 @@ async function loadToday() {
     ${sec("❓ Open questions", r.questions.map(m => `<div class="item" data-thread="${m.reply_to || m.id}">${avatar(m.author, "sm")}<div class="grow"><b>${esc(member(m.author).name)}</b> <span class="hint">#${esc(m.channel)}</span><div class="snip">${esc(m.text)}</div></div></div>`).join(""))}
     ${sec("👪 The family's day", agents.map(([id, a]) => `<div class="p-row">${avatar(id, "sm", true)}<div class="grow"><b>${esc(member(id).name)}</b>
       <small>${plural(a.messages, "message")} · ${plural(a.findings, "finding")} · ${plural(a.results, "result")}</small></div></div>`).join(""))}
+    ${S.me.kind === "boss" && r.cloud && r.cloud.agents ? sec(`☁️ Cloud spending in ${esc(r.cloud.month)}`, cloudRows(r.cloud, false)
+      + `<div class="hint" style="margin-top:6px">Family total: ${money(r.cloud.family_spent)}${r.cloud.family_budget > 0 ? " of " + money(r.cloud.family_budget) : ""} · set budgets on the <a href="#/admin">Admin page</a></div>`) : ""}
     ${sec("🔁 Coming up", r.upcoming.map(x => `<div class="p-row">${avatar(x.assignee, "sm")}<div class="grow"><b>${esc(x.title)}</b><small>${esc(member(x.assignee).name)} · ${whenAt(x.next_run)}</small></div></div>`).join(""))}
     ${!nWait && !c.findings && !c.done && !c.new_tasks ? '<div class="empty">A quiet day. Nothing new yet. 🌿</div>' : ""}`;
+}
+
+// ---------------------------------------------------------------- cloud budgets
+function money(x) { return "$" + (x < 1 && x > 0 ? x.toFixed(3) : x.toFixed(2)); }
+function budgetBar(a) {
+  const pct = a.budget > 0 ? Math.min(100, Math.round(a.spent / a.budget * 100)) : 0;
+  return `<div class="bar" title="${pct}% used"><i class="${pct >= 100 ? "bad" : pct >= 80 ? "warn" : ""}" style="width:${pct}%"></i></div>`;
+}
+function cloudRows(c, editable) {
+  return (c.agents || []).map(a => `<div class="p-row">${avatar(a.member, "sm")}<div class="grow"><div class="row"><b>${esc(member(a.member).name)}</b>
+      <span class="hint">${a.budget > 0 ? `${money(a.spent)} of ${money(a.budget)}` : "🏠 local only (no cloud budget)"}</span></div>${a.budget > 0 ? budgetBar(a) : ""}</div>
+      ${editable ? `<label class="hint">$/month <input class="field" type="number" min="0" step="0.5" value="${a.budget}" data-budget="${a.member}" style="width:80px"></label>` : ""}</div>`).join("");
 }
 
 // ---------------------------------------------------------------- routines
@@ -984,6 +1006,13 @@ async function viewAdmin() {
     <div class="section"><h2>Anti-chatter rules</h2>
       <form id="rules" class="grid2"></form>
       <p class="hint">You are never limited. To remove the demo conversation, run <code>hub seed --wipe-demo</code> in the terminal.</p></div>
+    <div class="section"><h2>☁️ Cloud AI budgets</h2>
+      <p class="hint">How much each agent may spend on cloud AI per month. $0 = local AI only. Agents ask the hub before every cloud call,
+      and fall back to their local model when the budget is used up. You get an Inbox note at 80% and 100%.
+      As a second safety net, also set a spend limit in the Anthropic Console.</p>
+      <div id="budgetRows"></div>
+      <div class="row" style="margin-top:8px"><label class="hint">Family total per month (0 = no family cap) $ <input class="field" type="number" min="0" step="1" id="familyBudget" style="width:90px"></label>
+        <span class="grow"></span><button class="btn pri" id="saveBudgets">Save budgets</button></div></div>
     <div class="section"><h2>💾 Backups</h2>
       <p class="hint">The hub saves a copy of everything once a day and keeps the last 14. To restore one, stop the hub and run
       <code>python3 -m hub restore &lt;name&gt;</code> on the hub machine.</p>
@@ -995,6 +1024,14 @@ async function viewAdmin() {
     catch (x) { toast(x.message, true); }
   };
   loadBackups();
+  loadBudgets();
+  $("#saveBudgets").onclick = async () => {
+    try {
+      for (const inp of $$("[data-budget]")) await api("/api/admin/budget", { method: "POST", body: { member: inp.dataset.budget, usd: +inp.value || 0 } });
+      await api("/api/admin/budget", { method: "POST", body: { usd: +$("#familyBudget").value || 0 } });
+      toast("Budgets saved ☁️"); loadBudgets();
+    } catch (x) { toast(x.message, true); }
+  };
   $("#addAgent").onsubmit = async e => {
     e.preventDefault();
     const f = e.target.elements;
@@ -1020,6 +1057,12 @@ async function viewAdmin() {
     try { await api("/api/admin/settings", { method: "PUT", body }); toast("Rules saved"); } catch (x) { toast(x.message, true); }
   };
   renderAdminParts(ov);
+}
+async function loadBudgets() {
+  if (!$("#budgetRows")) return;
+  const c = await api("/api/budget");
+  $("#budgetRows").innerHTML = cloudRows(c, true);
+  $("#familyBudget").value = c.family_budget;
 }
 async function loadBackups() {
   if (!$("#backupList")) return;
@@ -1228,7 +1271,7 @@ async function refresh() {
     else if (r.view === "memory") await loadMemory();
     else if (r.view === "routines") await loadRoutines();
     else if (r.view === "today") await loadToday();
-    else if (r.view === "admin") renderAdminParts(await api("/api/admin/overview"));
+    else if (r.view === "admin") { renderAdminParts(await api("/api/admin/overview")); loadBudgets(); loadBackups(); }
     if (S.thread) await loadThread();
   } catch (x) { if (x.status !== 401) console.warn(x); }
 }

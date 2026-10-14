@@ -170,6 +170,19 @@ CREATE TABLE IF NOT EXISTS files (
     created_at  REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS cloud_usage (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    member        TEXT NOT NULL,
+    model         TEXT NOT NULL,
+    input_tokens  INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd      REAL NOT NULL,
+    month         TEXT NOT NULL,            -- YYYY-MM in the hub's time zone
+    note          TEXT,
+    created_at    REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_cloud_usage ON cloud_usage(month, member);
+
 CREATE TABLE IF NOT EXISTS settings (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL
@@ -193,6 +206,7 @@ MIGRATIONS = [
     ("members", "task_autonomy", "TEXT NOT NULL DEFAULT 'ask'"),  # ask | free | strict (see core.AUTONOMY)
     ("inbox", "memory_id", "INTEGER"),                          # a family-memory item this is about
     ("tasks", "routine_id", "INTEGER"),                         # set when a routine created the task
+    ("members", "cloud_budget_usd", "REAL NOT NULL DEFAULT 0"), # monthly cloud AI budget; 0 = local only
 ]
 
 

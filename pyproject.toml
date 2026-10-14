@@ -17,7 +17,7 @@ hub = "hub.cli:main"
 
 [tool.setuptools]
 packages = ["hub"]
-py-modules = ["hub_client"]
+py-modules = ["hub_client", "family_brain"]
 
 [tool.setuptools.package-data]
 hub = ["static/*.html"]

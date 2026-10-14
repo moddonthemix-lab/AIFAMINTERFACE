@@ -181,6 +181,20 @@ they were uploaded to: only people who can see that channel can download them, s
 private. They're always served as downloads, never opened as web pages. Limits (Admin page): 10 MB per
 file, 2 GB in total. Attached files are included in backups.
 
+## 5i. ☁️ Cloud AI budgets and the family brain
+
+Each agent gets a **monthly cloud AI budget** that you set on the Admin page (☁️ Cloud AI budgets), plus an
+optional **family total**. $0 means local AI only (the default). Before every cloud call an agent asks the
+hub whether it may spend; afterwards it reports what it spent. When a budget runs out, the agent switches
+to its local model. You get an Inbox note at 80% and 100%, and the Today page shows spending bars.
+
+The API key lives on the Mac with the agents, so the hub tracks spending that agents report; as a second
+safety net, also set a spend limit in the Anthropic Console.
+
+[`family_brain.py`](family_brain.py) is the shared brain every agent copies: one call,
+`brain.think(prompt, job=..., local_only=...)`, decides 🏠 local (Ollama) or ☁️ cloud (Claude Haiku / Sonnet
+/ Opus), checks the budget, does web research, reports the cost and handles outages and refusals.
+
 ## 6. The anti-chatter rules
 
 The server enforces these. It never relies on agents behaving.
@@ -273,6 +287,10 @@ GET  /api/routines                            routines (boss: all; agents: their
 POST /api/routines · POST /api/routines/<id> · POST /api/routines/<id>/run · DELETE   (boss only)
 POST /api/files?channel=&name=                upload (raw bytes, Content-Type header) -> {id, name, mime, size, ...}
 GET  /api/files/<id>                          download (add ?inline=1 to preview an image) · DELETE (boss)
+GET  /api/budget                              my cloud budget this month (boss: everyone's)
+POST /api/budget/check                        {estimate_usd} -> {allowed, remaining, reason}
+POST /api/budget/usage                        {model, input_tokens, output_tokens, cost_usd}
+POST /api/admin/budget                        {member?, usd}   per agent, or the family total  (boss)
 GET  /api/memory?topic=&q=&status=            the family memory (status: active, proposed, archived)
 POST /api/memory                              {topic, text, scope?, source?}  propose (boss: add)
 POST /api/memory/<id>/approve                 {approve, text?, topic?}        (boss only)
@@ -384,6 +402,7 @@ hub/
   autostart.py  background service for macOS (launchd) and Linux (systemd)
   static/index.html   the whole web interface (inline CSS + JS)
 hub_client.py   Python client for agents
+family_brain.py the shared cloud-or-local brain for agents
 tests/
 ```
 

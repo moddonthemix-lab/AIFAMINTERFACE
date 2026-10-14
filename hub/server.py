@@ -192,6 +192,33 @@ def delete_file(h, me, q, body, fid):
     return {"ok": True}
 
 
+@route("GET", "/api/budget")
+def get_budget(h, me, q, body):
+    return h.hub.budget_status(me)
+
+
+@route("POST", "/api/budget/check")
+def post_budget_check(h, me, q, body):
+    return h.hub.budget_check(me, body.get("estimate_usd", 0))
+
+
+@route("POST", "/api/budget/usage")
+def post_budget_usage(h, me, q, body):
+    return h.hub.report_usage(me, body.get("model"), body.get("input_tokens"), body.get("output_tokens"),
+                              body.get("cost_usd", 0), body.get("note"))
+
+
+@route("POST", "/api/admin/budget", auth="boss")
+def admin_budget(h, me, q, body):
+    h.hub.set_budget(body.get("member"), body.get("usd"))
+    return h.hub.budget_status(me)
+
+
+@route("GET", "/api/admin/usage", auth="boss")
+def admin_usage(h, me, q, body):
+    return {"usage": h.hub.usage_log(_int(q, "limit", 50))}
+
+
 @route("GET", "/api/memory")
 def get_memory(h, me, q, body):
     from .memory import TOPICS

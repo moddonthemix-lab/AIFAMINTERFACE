@@ -210,6 +210,20 @@ class HubClient:
         """The boss's 👍 / 👎 on my messages: [{value, rated_at, message}], newest first."""
         return self._req("GET", "/api/feedback", params={"limit": limit})["feedback"]
 
+    # -- cloud budget (family_brain.py uses these)
+    def budget(self):
+        """My cloud budget this month: {budget, spent, remaining, allowed, ...}."""
+        return self._req("GET", "/api/budget")
+
+    def budget_check(self, estimate_usd):
+        """May I spend about this much on a cloud call? {allowed, remaining, reason}."""
+        return self._req("POST", "/api/budget/check", {"estimate_usd": estimate_usd})
+
+    def report_usage(self, model, input_tokens, output_tokens, cost_usd, note=None):
+        """Tell the hub what a cloud call cost (queued in the outbox if the hub is unreachable)."""
+        return self._write("/api/budget/usage", {"model": model, "input_tokens": input_tokens,
+                                                 "output_tokens": output_tokens, "cost_usd": cost_usd, "note": note})
+
     def interests(self):
         """The boss's interests and goals: what to explore and work towards."""
         return [m["text"] for m in self.memories(topic="interests")]

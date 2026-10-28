@@ -228,6 +228,10 @@ the page shows it as neat cards.
 - **On a routine:** ✏️ Edit → "Answer with form" makes the agent answer in that form; "Their answer form" does
   the same for the "then" step. A task that expects a form shows "📋 answer with the ... form", and the hub
   won't accept a result in any other shape.
+- **Order rules for the "then" step:** "Accept their answer from" (e.g. 16:00) refuses the next agent's result
+  before that time on the next weekday, so Trader can't report before the session ends. "They must answer
+  every item" makes the answer cover each handed-over item (each setup's symbol). A form field can also be
+  required only for some answers (Trade report: a `reason` for PASSED / BLOCKED).
 - **For agents:** `GET /api/forms/<name>` includes a JSON schema. `family_brain.py`'s `fill_form(...)` gives
   it to the AI (Claude or Ollama), so the answer always comes back in the right shape.
 

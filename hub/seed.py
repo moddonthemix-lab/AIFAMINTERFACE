@@ -48,7 +48,21 @@ def setup(hub):
     _seed_once(hub, "trader_daily_report", lambda: _trader_report_routine(hub))
     _seed_once(hub, "amo_grade_setups", lambda: _amo_grading_routine(hub))
     _seed_once(hub, "trading_forms_on_routines", lambda: _trading_forms(hub))
+    _seed_once(hub, "trade_report_reason_rule", lambda: _trade_report_reason_rule(hub))
     return token
+
+
+def _trade_report_reason_rule(hub):
+    """Hubs made before the rule existed: PASSED / BLOCKED rows need a reason."""
+    try:
+        f = hub.form("trade_report")
+    except Exception:
+        return
+    fields = {x["name"]: x for x in f["fields"]}
+    outcome = fields.get("outcome") or {}
+    if "reason" in fields and all(v in outcome.get("choices", []) for v in ("PASSED", "BLOCKED")):
+        fields["reason"]["required_when"] = {"field": "outcome", "in": ["PASSED", "BLOCKED"]}
+        hub.save_form(f, builtin=f["builtin"])
 
 
 def _seed_once(hub, key, make):

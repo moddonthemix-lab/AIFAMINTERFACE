@@ -522,7 +522,7 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
 
     def post_message(self, author, channel_name, type_, text=None, data=None, reply_to=None,
                      *, enforce=True, demo=False, created_at=None, client_id=None, routine_id=None,
-                     chain_from=None, proposed=None):
+                     chain_from=None, proposed=None, result_after=None, must_cover=False):
         """Store a message after checking its shape, permissions and the anti-chatter rules.
 
         `author` is the members row of whoever is posting (set from their token,
@@ -572,10 +572,8 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
                     data["summary"] = text
         if type_ == "task_request" and data.get("expects_form"):
             self.form(data["expects_form"])  # must exist
-        if type_ == "result" and task["expects_form"] and not is_boss:
-            if (data.get("form") or {}).get("name") != task["expects_form"]:
-                raise HubError(400, f"task {task['id']} must be answered with the '{task['expects_form']}' form "
-                                    f"(data.form; see GET /api/forms/{task['expects_form']})")
+        if task is not None and not is_boss and (type_ == "result" or data.get("status") == "done"):
+            self._check_finish_order(task, type_, data)
 
         if type_ == "review" and not (is_boss or author["id"] in REVIEWERS):
             raise HubError(403, "only Butler and the boss post reviews")
@@ -645,12 +643,12 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
                 if type_ == "task_request":
                     tc = c.execute(
                         "INSERT INTO tasks(title, details, requester, assignee, status, priority, due, channel, "
-                        "message_id, created_at, updated_at, demo, routine_id, chain_from, expects_form) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "message_id, created_at, updated_at, demo, routine_id, chain_from, expects_form, "
+                        "result_after, must_cover) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (data["title"], data["details"], author["id"], data["assignee"],
                          "proposed" if needs_ok else "open", data["priority"],
                          data.get("due"), ch["name"], msg["id"], ts, ts, int(demo), routine_id, chain_from,
-                         data.get("expects_form")))
+                         data.get("expects_form"), result_after, int(bool(must_cover))))
                     msg["task_id"] = tc.lastrowid
                     if needs_ok:
                         # The assignee hears about it only once the boss approves.
@@ -711,6 +709,34 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
             if followup is not None:
                 msg["followup_task"] = followup
         return msg
+
+    def _check_finish_order(self, task, type_, data):
+        """The order rules for finishing a task (the boss is exempt): the right form, not too early,
+        and every handed-over item answered."""
+        from .routines import when_text
+        tid = task["id"]
+        if type_ != "result" and (task["expects_form"] or task["result_after"] or task["must_cover"]):
+            raise HubError(400, f"task {tid} is finished by posting a result"
+                                + (f" with the '{task['expects_form']}' form" if task["expects_form"] else "")
+                                + ", not by moving it to done")
+        if task["result_after"] and time.time() < task["result_after"]:
+            raise HubError(409, f"task {tid}'s result is accepted from {when_text(task['result_after'])}. "
+                                "Keep it in_progress and work on it until then.")
+        form = data.get("form") or {}
+        if task["expects_form"] and form.get("name") != task["expects_form"]:
+            raise HubError(400, f"task {tid} must be answered with the '{task['expects_form']}' form "
+                                f"(data.form; see GET /api/forms/{task['expects_form']})")
+        if task["must_cover"]:
+            req = self.message(task["message_id"])
+            given = (_loads(req["data"]).get("form") or {}).get("items") or [] if req is not None else []
+            names = {f["name"] for f in self.form(form["name"])["fields"]}
+            key = next((k for k in (given[0] if given else {}) if k in names), None)
+            if key:
+                answered = {str(i.get(key)).strip().lower() for i in form.get("items") or []}
+                missing = [str(i.get(key)) for i in given if str(i.get(key)).strip().lower() not in answered]
+                if missing:
+                    raise HubError(400, f"task {tid}: answer every item you were handed. Missing {key}: "
+                                        + ", ".join(missing))
 
     def _inbox(self, c, member_id, kind, message_id=None, task_id=None, note=None, demo=False, memory_id=None):
         cur = c.execute("INSERT INTO inbox(member, kind, message_id, task_id, note, created_at, demo, memory_id) "
@@ -788,6 +814,11 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
         d["chain_from"] = t["chain_from"]
         d["followup_task_id"] = t["followup_task_id"]
         d["expects_form"] = t["expects_form"]
+        d["result_after"] = t["result_after"]
+        d["must_cover"] = bool(t["must_cover"])
+        if t["result_after"]:
+            from .routines import when_text
+            d["result_after_text"] = when_text(t["result_after"])
         req = self.q1("SELECT data FROM messages WHERE id=?", (t["message_id"],)) if t["message_id"] else None
         req_form = _loads(req["data"]).get("form") if req is not None else None
         if req_form:

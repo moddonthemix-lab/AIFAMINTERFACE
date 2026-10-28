@@ -53,7 +53,8 @@ BUILTIN = [
          {"name": "symbol", "type": "text", "required": True},
          {"name": "outcome", "type": "choice", "required": True,
           "choices": ["TAKEN", "NOT TRIGGERED", "NOT AVAILABLE", "PASSED", "BLOCKED"]},
-         {"name": "reason", "type": "text", "required": False, "help": "Required for PASSED / BLOCKED"},
+         {"name": "reason", "type": "text", "required": False, "help": "Required for PASSED / BLOCKED",
+          "required_when": {"field": "outcome", "in": ["PASSED", "BLOCKED"]}},
          {"name": "entry", "type": "number", "required": False},
          {"name": "exit", "type": "number", "required": False},
          {"name": "pnl_usd", "type": "number", "required": False, "help": "After fees"},
@@ -77,6 +78,10 @@ def json_schema(form):
                 {"type": "boolean"})
         if f.get("help"):
             base["description"] = f["help"]
+        if f.get("required_when"):
+            rw = f["required_when"]
+            base["description"] = (base.get("description", "") + f" (required when {rw['field']} is "
+                                   + " or ".join(rw["in"]) + ")").strip()
         return base if f.get("required") else {"anyOf": [base, {"type": "null"}]}
 
     item = {"type": "object", "additionalProperties": False,
@@ -160,6 +165,10 @@ def check_filled(form, filled):
                 clean[f["name"]] = check_value(f, item.get(f["name"]))
             except ValueError as e:
                 raise ValueError(f"item {n}: {e}") from None
+        for f in form["fields"]:
+            rw = f.get("required_when")
+            if rw and clean[f["name"]] is None and clean.get(rw["field"]) in rw["in"]:
+                raise ValueError(f"item {n}: '{f['name']}' is required when {rw['field']} is {clean[rw['field']]}")
         out.append(clean)
     return {"name": form["name"], "items": out, "note": note}
 
@@ -207,7 +216,20 @@ def check_definition(d):
             cf["choices"] = choices[:30]
         if f.get("help"):
             cf["help"] = str(f["help"])[:200]
+        if f.get("required_when"):
+            cf["required_when"] = f["required_when"]
         clean.append(cf)
+    by_name = {f["name"]: f for f in clean}
+    for cf in clean:  # "required when <field> is one of ...", e.g. a reason when the outcome is PASSED
+        rw = cf.get("required_when")
+        if rw is None:
+            continue
+        other = by_name.get(str((rw or {}).get("field") if isinstance(rw, dict) else ""))
+        values = rw.get("in") if isinstance(rw, dict) else None
+        if other is None or other["type"] != "choice" or not isinstance(values, list) or \
+                not values or any(v not in other["choices"] for v in values):
+            raise ValueError(f"field '{cf['name']}': 'required when' must name a choice field and some of its options")
+        cf["required_when"] = {"field": other["name"], "in": list(values)}
     return {"name": name, "title": title, "description": str(d.get("description") or "")[:500],
             "list": bool(d.get("list", True)), "allow_empty": bool(d.get("allow_empty")), "fields": clean}
 

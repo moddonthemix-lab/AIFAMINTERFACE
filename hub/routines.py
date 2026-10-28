@@ -55,6 +55,12 @@ def next_run(r, after):
     return after + 86400  # unreachable in practice
 
 
+def when_text(ts):
+    """'Thu Oct 29, 4:00 PM' in the hub's time zone."""
+    d = now_dt(ts)
+    return f"{d:%a %b} {d.day}, {d.hour % 12 or 12}:{d:%M} {'AM' if d.hour < 12 else 'PM'}"
+
+
 def describe(r):
     if r["every"] == "hours":
         return f"Every {r['hours']} hours" if int(r["hours"]) != 1 else "Every hour"
@@ -75,7 +81,8 @@ class RoutinesMixin:
         d["form"] = r["form"]
         d["then"] = {"assignee": r["then_assignee"], "title": r["then_title"], "details": r["then_details"],
                      "channel": r["then_channel"], "approval": bool(r["then_approval"]),
-                     "form": r["then_form"]} if r["then_assignee"] else None
+                     "form": r["then_form"], "result_at": r["then_result_at"],
+                     "cover": bool(r["then_cover"])} if r["then_assignee"] else None
         return d
 
     def chain_followup(self, tid):
@@ -114,7 +121,10 @@ class RoutinesMixin:
         if r["then_form"]:
             data["expects_form"] = r["then_form"]
         msg = self.post_message(self.member("boss"), r["then_channel"], "task_request", data=data, enforce=False,
-                                routine_id=r["id"], chain_from=t["id"], proposed=bool(r["then_approval"]))
+                                routine_id=r["id"], chain_from=t["id"], proposed=bool(r["then_approval"]),
+                                result_after=(next_run({"every": "weekday", "at": r["then_result_at"]}, time.time())
+                                              if r["then_result_at"] else None),
+                                must_cover=bool(r["then_cover"] and carried_form))
         with self.tx() as c:
             c.execute("UPDATE tasks SET followup_task_id=? WHERE id=?", (msg["task_id"], t["id"]))
         return msg["task"]
@@ -171,7 +181,7 @@ class RoutinesMixin:
         out = {"title": title, "details": details or title, "assignee": assignee["id"], "channel": ch["name"],
                "priority": priority, "every": every, "at": at, "weekday": weekday, "hours": hours,
                "then_assignee": None, "then_title": None, "then_details": None, "then_channel": None,
-               "then_approval": 0, "form": None, "then_form": None}
+               "then_approval": 0, "form": None, "then_form": None, "then_result_at": None, "then_cover": 0}
         if f.get("form"):
             out["form"] = self.form(f["form"])["name"]
         nxt = (f.get("then_assignee") or "").strip().lower()
@@ -189,6 +199,13 @@ class RoutinesMixin:
             out.update(then_assignee=who["id"], then_title=then_title, then_details=then_details or then_title,
                        then_channel=then_ch["name"], then_approval=int(bool(f.get("then_approval"))),
                        then_form=self.form(f["then_form"])["name"] if f.get("then_form") else None)
+            result_at = (f.get("then_result_at") or "").strip()
+            if result_at and not AT_RE.match(result_at):
+                raise HubError(400, "'then_result_at' must be a time like 16:00")
+            out["then_result_at"] = result_at or None
+            out["then_cover"] = int(bool(f.get("then_cover")))
+            if out["then_cover"] and not out["then_form"]:
+                raise HubError(400, "'answer every item' needs an answer form for the 'then' step")
         return out
 
     def create_routine(self, fields, demo=False):
@@ -198,10 +215,11 @@ class RoutinesMixin:
             cur = c.execute(
                 "INSERT INTO routines(title, details, assignee, channel, priority, every, at, weekday, hours, "
                 "next_run, created_at, demo, then_assignee, then_title, then_details, then_channel, then_approval, "
-                "form, then_form) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "form, then_form, then_result_at, then_cover) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (r["title"], r["details"], r["assignee"], r["channel"], r["priority"], r["every"], r["at"],
                  r["weekday"], r["hours"], next_run(r, now), now, int(demo), r["then_assignee"], r["then_title"],
-                 r["then_details"], r["then_channel"], r["then_approval"], r["form"], r["then_form"]))
+                 r["then_details"], r["then_channel"], r["then_approval"], r["form"], r["then_form"],
+                 r["then_result_at"], r["then_cover"]))
             self._event(c, "routine", {"id": cur.lastrowid}, member="boss")
         return self.routine_dict(self._routine(cur.lastrowid))
 
@@ -214,11 +232,11 @@ class RoutinesMixin:
         with self.tx() as c:
             c.execute("UPDATE routines SET title=?, details=?, assignee=?, channel=?, priority=?, every=?, at=?, "
                       "weekday=?, hours=?, enabled=?, next_run=?, then_assignee=?, then_title=?, then_details=?, "
-                      "then_channel=?, then_approval=?, form=?, then_form=? WHERE id=?",
+                      "then_channel=?, then_approval=?, form=?, then_form=?, then_result_at=?, then_cover=? WHERE id=?",
                       (r["title"], r["details"], r["assignee"], r["channel"], r["priority"], r["every"], r["at"],
                        r["weekday"], r["hours"], enabled, next_run(r, time.time()), r["then_assignee"],
                        r["then_title"], r["then_details"], r["then_channel"], r["then_approval"], r["form"],
-                       r["then_form"], rid))
+                       r["then_form"], r["then_result_at"], r["then_cover"], rid))
             self._event(c, "routine", {"id": rid}, member="boss")
         return self.routine_dict(self._routine(rid))
 

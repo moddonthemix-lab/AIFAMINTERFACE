@@ -120,3 +120,59 @@ def test_brain_fills_a_form_with_structured_output(server, tokens, hub, tmp_path
     # And the hub accepts what the brain produced.
     m = c.post("trades", "", form=t.form)
     assert m["data"]["form"]["items"][0]["trigger"] == 182.4
+
+
+def test_order_rules_for_the_trade_plan(hub, monkeypatch):
+    """Trader can't report before the set time, must answer every setup, and PASSED needs a reason."""
+    import time as _time
+    r = hub.create_routine({"title": "Top setups for tomorrow", "assignee": "amo", "channel": "trades",
+                            "form": "trade_setup", "then_assignee": "trader", "then_title": "Trade plan",
+                            "then_channel": "trades", "then_form": "trade_report",
+                            "then_result_at": "16:00", "then_cover": True})
+    assert r["then"]["result_at"] == "16:00" and r["then"]["cover"] is True
+    t = hub.run_routine(r["id"], force=True)
+    nvda = dict(SETUP, symbol="NVDA", direction="short", trigger=131.2, stop=134, targets=[127.5])
+    msg = hub.post_message(hub.member("amo"), "trades", "result",
+                           data={"task_id": t["id"], "form": {"name": "trade_setup", "items": [SETUP, nvda]}})
+    plan = msg["followup_task"]
+    assert plan["must_cover"] and plan["result_after"] > _time.time() and plan["result_after_text"]
+    trader = hub.member("trader")
+    taken = {"symbol": "AAPL", "outcome": "TAKEN", "entry": 182.4, "exit": 185.1, "pnl_usd": 26.5}
+    report = {"task_id": plan["id"], "form": {"name": "trade_report", "items": [taken]}}
+    with pytest.raises(HubError) as e:  # too early
+        hub.post_message(trader, "trades", "result", data=report)
+    assert e.value.status == 409 and "accepted from" in e.value.message
+    with pytest.raises(HubError) as e:  # no skipping the result by moving it to done
+        hub.post_message(trader, "trades", "task_update", data={"task_id": plan["id"], "status": "done"})
+    assert "posting a result" in e.value.message
+    hub.post_message(trader, "trades", "task_update", data={"task_id": plan["id"], "status": "in_progress"})
+    later = plan["result_after"] + 60
+    monkeypatch.setattr(_time, "time", lambda: later)
+    with pytest.raises(HubError) as e:  # NVDA wasn't answered
+        hub.post_message(trader, "trades", "result", data=report)
+    assert "NVDA" in e.value.message
+    report["form"]["items"].append({"symbol": "nvda", "outcome": "PASSED"})
+    with pytest.raises(HubError) as e:  # a pass needs a reason
+        hub.post_message(trader, "trades", "result", data=report)
+    assert "reason" in e.value.message
+    report["form"]["items"][1]["reason"] = "chop on the 4h"
+    done = hub.post_message(trader, "trades", "result", data=report)
+    assert done["task"]["status"] == "done"
+
+
+def test_result_time_is_the_next_weekday(hub):
+    from hub.routines import next_run, now_dt
+    import datetime as dt
+    friday_evening = dt.datetime(2026, 10, 30, 19, 0).timestamp()
+    when = now_dt(next_run({"every": "weekday", "at": "16:00"}, friday_evening))
+    assert (when.weekday(), when.hour) == (0, 16)  # Monday 4 PM
+
+
+def test_required_when_must_point_at_a_choice(hub):
+    with pytest.raises(HubError):
+        hub.save_form({"name": "bad_form", "fields": [
+            {"name": "why", "type": "text", "required_when": {"field": "nope", "in": ["x"]}}]})
+    f = hub.save_form({"name": "weekly_review", "fields": [
+        {"name": "verdict", "type": "choice", "choices": ["good", "bad"], "required": True},
+        {"name": "why", "type": "text", "required_when": {"field": "verdict", "in": ["bad"]}}]})
+    assert f["fields"][1]["required_when"] == {"field": "verdict", "in": ["bad"]}

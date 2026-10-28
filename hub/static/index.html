@@ -521,7 +521,8 @@ function cardHTML(m, { inThread = false } = {}) {
         ${d.priority && d.priority !== "normal" ? `<span class="prio-${d.priority}">${d.priority} priority</span>` : ""}</div>
         <h3>${esc(d.title)}</h3><div class="txt">${fmt(d.details)}</div>
         <div class="sub" style="margin-top:6px">Assigned to ${avatar(d.assignee, "xs")} <b>${esc(member(d.assignee).name)}</b>${d.due ? " · due " + esc(d.due) : ""}</div>
-        ${t.expects_form ? `<div class="sub">📋 answer with the <b>${esc(((S.forms || {})[t.expects_form] || {}).title || t.expects_form)}</b> form</div>` : ""}
+        ${t.expects_form ? `<div class="sub">📋 answer with the <b>${esc(((S.forms || {})[t.expects_form] || {}).title || t.expects_form)}</b> form${t.must_cover ? ", every item" : ""}</div>` : ""}
+        ${t.result_after && !t.result ? `<div class="sub">⏳ answer accepted from <b>${esc(t.result_after_text || whenAt(t.result_after))}</b></div>` : ""}
         ${t.chain_from && taskById(t.chain_from) ? `<div class="sub">⬅ started by <a href="#" data-thread="${taskById(t.chain_from).message_id}">${esc(member(taskById(t.chain_from).assignee).name)}'s result (task #${t.chain_from})</a></div>` : ""}
         ${t.followup_task_id && taskById(t.followup_task_id) ? `<div class="sub">➜ handed to <a href="#" data-thread="${taskById(t.followup_task_id).message_id}">${esc(member(taskById(t.followup_task_id).assignee).name)} (task #${t.followup_task_id})</a></div>` : ""}
         ${t.result ? `<div class="box result-box">✅ <b>Result:</b> ${t.result.form ? formHTML(t.result.form) : fmt(t.result.summary)}</div>` : ""}
@@ -1091,6 +1092,8 @@ async function viewRoutines() {
       <label>Their channel<select class="field" name="then_channel">${S.channels.map(c => `<option ${c.name === "tasks" ? "selected" : ""} value="${esc(c.name)}">${c.private ? "🔒 " : "#"}${esc(c.name)}</option>`).join("")}</select></label>
       <label>Their answer form<select class="field" name="then_form">${formOptions()}</select></label>
       <label style="flex-direction:row;display:flex;align-items:center;gap:6px"><input type="checkbox" name="then_approval"> Wait for my 👍 first</label>
+      <label>Accept their answer from<input class="field" name="then_result_at" type="time" title="Their result is refused before this time on the next weekday (e.g. 16:00 = after the market closes). Empty = any time."></label>
+      <label style="flex-direction:row;display:flex;align-items:center;gap:6px"><input type="checkbox" name="then_cover"> They must answer every item</label>
       <label style="grid-column:1/-1">What they should do with it<textarea class="field" name="then_details" rows="2" placeholder="e.g. Trade these setups if they trigger and you can trade them on your market. Report each one."></textarea></label>
       <label>&nbsp;<span class="row"><button class="btn pri" id="routineSave">Add routine</button><button type="button" class="btn" id="routineCancel" hidden>Cancel</button></span></label>
     </form><p class="hint" id="hubTime"></p></div>`);
@@ -1118,6 +1121,8 @@ async function viewRoutines() {
     x.then_approval.checked = !!(r.then && r.then.approval);
     x.form.value = r.form || "";
     x.then_form.value = r.then ? (r.then.form || "") : "";
+    x.then_result_at.value = r.then ? (r.then.result_at || "") : "";
+    x.then_cover.checked = !!(r.then && r.then.cover);
     sync();
     $("#routineFormTitle").textContent = "Edit: " + r.title; $("#routineSave").textContent = "Save changes"; $("#routineCancel").hidden = false;
     f.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1129,7 +1134,7 @@ async function viewRoutines() {
       channel: x.channel.value, every: x.every.value, weekday: +x.weekday.value, at: x.at.value, hours: +x.hours.value, priority: x.priority.value,
       then_assignee: x.then_assignee.value, then_title: x.then_title.value, then_details: x.then_details.value,
       then_channel: x.then_channel.value, then_approval: x.then_approval.checked,
-      form: x.form.value, then_form: x.then_form.value };
+      form: x.form.value, then_form: x.then_form.value, then_result_at: x.then_result_at.value, then_cover: x.then_cover.checked };
     try {
       if (S.editRoutine) { await api(`/api/routines/${S.editRoutine}`, { method: "POST", body }); toast("Routine saved 🔁"); }
       else { await api("/api/routines", { method: "POST", body }); toast("Routine added 🔁"); }
@@ -1160,7 +1165,9 @@ async function loadRoutines() {
     <div class="hint">${esc(member(x.assignee).name)} · ${(S.channels.find(c => c.name === x.channel) || {}).private ? "🔒 " : "#"}${esc(x.channel)} · next: ${x.enabled ? whenAt(x.next_run) : "—"} · last: ${whenAt(x.last_run)}${x.skipped ? ` · skipped ${plural(x.skipped, "time")} (last task unfinished)` : ""}</div>
     <div class="snip">${esc(x.details)}</div>
     ${x.form ? `<div class="hint" style="margin-top:4px">📋 answered with the ${esc(((S.forms || {})[x.form] || {}).title || x.form)} form</div>` : ""}
-    ${x.then ? `<div class="hint" style="margin-top:4px">➜ then ${esc(member(x.then.assignee).emoji)} <b>${esc(member(x.then.assignee).name)}</b>: “${esc(x.then.title)}” in #${esc(x.then.channel)}${x.then.approval ? " · waits for your 👍" : " · starts right away"}</div>` : ""}
+    ${x.then ? `<div class="hint" style="margin-top:4px">➜ then ${esc(member(x.then.assignee).emoji)} <b>${esc(member(x.then.assignee).name)}</b>: “${esc(x.then.title)}” in #${esc(x.then.channel)}${x.then.approval ? " · waits for your 👍" : " · starts right away"}</div>
+      ${x.then.form || x.then.result_at || x.then.cover ? `<div class="hint">&nbsp;&nbsp;&nbsp;${[x.then.form ? `📋 answers with the ${esc(((S.forms || {})[x.then.form] || {}).title || x.then.form)} form` : "",
+        x.then.result_at ? `⏳ not before ${esc(x.then.result_at)} next weekday` : "", x.then.cover ? "✔ every item answered" : ""].filter(Boolean).join(" · ")}</div>` : ""}` : ""}
     <div class="row" style="margin-top:6px"><button class="btn sm" data-routine-run="${x.id}">▶ Run now</button>
       <button class="btn sm" data-routine-edit="${x.id}">✏️ Edit</button>
       <button class="btn sm" data-routine-toggle="${x.id}" data-on="${x.enabled ? 1 : 0}">${x.enabled ? "⏸ Pause" : "▶ Resume"}</button>
@@ -1271,12 +1278,12 @@ async function viewAdmin() {
 }
 const FIELD_TYPES = { text: "Text", number: "Number", choice: "Choice (pick one)", numbers: "Numbers (list)", list: "Text list", yesno: "Yes / no" };
 function fieldRow(f = {}) {
-  return `<div class="row" data-frow style="margin-bottom:6px">
+  return `<div class="row" data-frow data-rw="${esc(f.required_when ? JSON.stringify(f.required_when) : "")}" data-orig="${esc(f.name || "")}" style="margin-bottom:6px">
     <input class="field" data-k="name" placeholder="field name" value="${esc(f.name || "")}" style="width:140px">
     <select class="field" data-k="type">${Object.entries(FIELD_TYPES).map(([k, l]) => `<option value="${k}" ${f.type === k ? "selected" : ""}>${l}</option>`).join("")}</select>
     <input class="field" data-k="choices" placeholder="choices: a, b, c" value="${esc((f.choices || []).join(", "))}" style="width:160px">
     <input class="field grow" data-k="help" placeholder="hint for the agents (optional)" value="${esc(f.help || "")}">
-    <label class="hint"><input type="checkbox" data-k="required" ${f.required ? "checked" : ""}> required</label>
+    <label class="hint"><input type="checkbox" data-k="required" ${f.required ? "checked" : ""}> required${f.required_when ? ` (or when ${esc(f.required_when.field)} is ${esc(f.required_when.in.join("/"))})` : ""}</label>
     <button type="button" class="btn sm danger" data-del-field>✕</button></div>`;
 }
 function renderFormList() {
@@ -1300,7 +1307,9 @@ function setupFormEditor() {
     const x = e.target.elements;
     const fields = $$("[data-frow]").map(r => {
       const get = k => $(`[data-k=${k}]`, r);
-      return { name: get("name").value.trim(), type: get("type").value, choices: get("choices").value, help: get("help").value.trim(), required: get("required").checked };
+      const rw = r.dataset.rw && get("name").value.trim() === r.dataset.orig ? JSON.parse(r.dataset.rw) : null;
+      return { name: get("name").value.trim(), type: get("type").value, choices: get("choices").value, help: get("help").value.trim(), required: get("required").checked,
+        ...(rw ? { required_when: rw } : {}) };
     }).filter(f => f.name);
     try {
       await api("/api/admin/forms", { method: "POST", body: { name: x.name.value.trim(), title: x.title.value.trim(), description: x.description.value.trim(),

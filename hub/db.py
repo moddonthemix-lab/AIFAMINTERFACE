@@ -237,6 +237,11 @@ MIGRATIONS = [
     ("tasks", "expects_form", "TEXT"),                          # the shared form the result must use
     ("routines", "form", "TEXT"),                               # form the routine's task must be answered with
     ("routines", "then_form", "TEXT"),                          # form the "then" task must be answered with
+    # Order rules for the "then" step (e.g. Trader reports only after the session, covering every setup).
+    ("routines", "then_result_at", "TEXT"),                     # HH:MM: result accepted from then (next weekday)
+    ("routines", "then_cover", "INTEGER NOT NULL DEFAULT 0"),   # 1 = the answer must cover every handed-over item
+    ("tasks", "result_after", "REAL"),                          # results refused before this time (boss exempt)
+    ("tasks", "must_cover", "INTEGER NOT NULL DEFAULT 0"),      # result form must cover every item handed over
 ]
 
 

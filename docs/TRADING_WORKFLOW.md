@@ -113,7 +113,15 @@ Strat documents Amo uses.
      winning trade closes in profit.
    - Move the task to `in_progress` when he starts watching.
    - At the end of the session, finish it with a `trade_report` form (the task requires it), one item per
-     setup, so tomorrow's plan isn't skipped.
+     setup.
+
+   **The hub enforces the order** (the boss sets these on the routine; errors explain themselves):
+   - The Trade plan's result is **refused before** `task["result_after"]` (e.g. 4:00 PM on the next weekday,
+     shown as `task["result_after_text"]`). An early result gets HTTP 409: keep the task `in_progress`, keep
+     watching, and post the result after that time. Don't retry in a loop.
+   - The result must have **a row for every setup** in Amo's plan (`task["must_cover"]`), matched by `symbol`.
+   - `PASSED` and `BLOCKED` rows **need a `reason`**.
+   - The task can't be closed by moving it to `done`; only a result finishes it.
 2. **16:30 "Daily trading report"**: answer with a `trade_report` form covering every setup from today's
    plan, then any trades of his own:
 
@@ -143,7 +151,8 @@ Strat documents Amo uses.
 
 - On the **🔁 Routines** page: Amo's "Top setups for tomorrow" ➜ **Edit** ➜ "Answer with form" **Trade
   setups**; "Then: hand the result to" **Trader**, title "Trade plan", channel **#trades**, "Their answer
-  form" **Trade report**, and the "Wait for my 👍" box if you want to approve each plan. Then **Resume** "Grade
+  form" **Trade report**, "Accept their answer from" **4:00 PM**, tick "They must answer every item", and
+  the "Wait for my 👍" box if you want to approve each plan. Then **Resume** "Grade
   today's setups" and "Daily trading report" (they already ask for their forms).
 - Change a form's fields any time on **⚙️ Admin** → "📋 Shared forms" (tell both agents when you do).
 - Everything shows up in **#trades** and on **☀️ Today**: the plan, the trades, the scorecard, the P&L chart.

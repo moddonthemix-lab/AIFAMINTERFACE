@@ -19,7 +19,7 @@ BRAINS = ("local", "cloud")
 FIELDS = {
     "post": (),
     "question": ("to",),
-    "task_request": ("title", "details", "assignee", "due", "priority", "parent_task"),
+    "task_request": ("title", "details", "assignee", "due", "priority", "parent_task", "expects_form"),
     "task_update": ("task_id", "status", "note"),
     "result": ("task_id", "summary", "artifacts"),
     "finding": ("claim", "status", "confidence", "sources"),
@@ -30,7 +30,7 @@ FIELDS = {
 MAX_TITLE = 200
 MAX_LIST_ITEMS = 20
 MAX_LIST_ITEM = 500
-MAX_DATA_BYTES = 16_000
+MAX_DATA_BYTES = 48_000
 
 
 class ValidationError(ValueError):
@@ -101,11 +101,12 @@ def validate(type_, text, data, max_text=4000):
         raise ValidationError("'data' must be an object")
     brain = data.get("brain")
     files = data.get("files")
+    form = data.get("form")  # a filled-in shared form; checked against its definition in core.py
     data = {k: v for k, v in data.items() if k in FIELDS[type_]}
     out = {}
 
     if type_ in ("post", "system"):
-        text = _text(text, "text", max_text)
+        text = _text(text, "text", max_text, required=not form)
 
     elif type_ == "question":
         text = _text(text, "text", max_text)
@@ -119,6 +120,9 @@ def validate(type_, text, data, max_text=4000):
         if data.get("due"):
             out["due"] = _text(data["due"], "due", 40)
         out["priority"] = _choice(data.get("priority") or "normal", "priority", PRIORITIES)
+        if data.get("expects_form"):
+            # "Answer this task with this shared form."
+            out["expects_form"] = _text(data["expects_form"], "expects_form", 40).lower()
         if data.get("parent_task") is not None:
             # "This is a step of a task I'm already working on."
             out["parent_task"] = _int(data["parent_task"], "parent_task")
@@ -134,7 +138,7 @@ def validate(type_, text, data, max_text=4000):
 
     elif type_ == "result":
         out["task_id"] = _int(data.get("task_id"), "task_id")
-        out["summary"] = _text(data.get("summary") or text, "summary", max_text)
+        out["summary"] = _text(data.get("summary") or text, "summary", max_text, required=not form)
         out["artifacts"] = _str_list(data.get("artifacts"), "artifacts")
         text = out["summary"]
 
@@ -162,6 +166,8 @@ def validate(type_, text, data, max_text=4000):
     # Optional on every type: which brain wrote it, "local" (Ollama) or "cloud".
     if brain is not None:
         out["brain"] = _choice(brain, "brain", BRAINS)
+    if form is not None:
+        out["form"] = form
     # Optional on every type: attached file ids (upload first with POST /api/files).
     if files:
         if not isinstance(files, list) or len(files) > 10:

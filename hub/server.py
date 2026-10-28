@@ -230,6 +230,28 @@ def post_pnl(h, me, q, body):
                             body.get("equity_usd"), body.get("trades"), body.get("note"), body.get("member"))
 
 
+@route("GET", "/api/forms")
+def get_forms(h, me, q, body):
+    return {"forms": h.hub.forms()}
+
+
+@route("GET", r"/api/forms/(?P<name>[a-z0-9_]+)")
+def get_form(h, me, q, body, name):
+    return h.hub.form(name, with_schema=True)
+
+
+@route("POST", "/api/admin/forms", auth="boss")
+def admin_save_form(h, me, q, body):
+    builtin = any(f["name"] == str(body.get("name", "")).lower() and f["builtin"] for f in h.hub.forms())
+    return h.hub.save_form(body, builtin=builtin)
+
+
+@route("DELETE", r"/api/admin/forms/(?P<name>[a-z0-9_]+)", auth="boss")
+def admin_delete_form(h, me, q, body, name):
+    h.hub.delete_form(name)
+    return {"ok": True}
+
+
 @route("GET", "/api/memory")
 def get_memory(h, me, q, body):
     from .memory import TOPICS

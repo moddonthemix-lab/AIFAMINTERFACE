@@ -22,6 +22,7 @@ from .backup import BackupMixin
 from .files import FilesMixin
 from .budget import BudgetMixin
 from .pnl import PnlMixin
+from .forms import FormsMixin
 from .messages import TASK_STATUSES, ValidationError, parse_target, validate
 
 ONLINE_SEC = 120
@@ -61,7 +62,7 @@ def _loads(s):
     return json.loads(s) if s else {}
 
 
-class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlMixin):
+class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlMixin, FormsMixin):
     def __init__(self, home):
         self.home = Path(home).expanduser()
         self.home.mkdir(parents=True, exist_ok=True)
@@ -563,6 +564,18 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
 
         if data.get("files"):
             self.check_attachments(author, ch["name"], data["files"])
+        if data.get("form") is not None:
+            data["form"], form_text = self.check_form(data["form"])
+            if not text:
+                text = form_text
+                if type_ == "result":
+                    data["summary"] = text
+        if type_ == "task_request" and data.get("expects_form"):
+            self.form(data["expects_form"])  # must exist
+        if type_ == "result" and task["expects_form"] and not is_boss:
+            if (data.get("form") or {}).get("name") != task["expects_form"]:
+                raise HubError(400, f"task {task['id']} must be answered with the '{task['expects_form']}' form "
+                                    f"(data.form; see GET /api/forms/{task['expects_form']})")
 
         if type_ == "review" and not (is_boss or author["id"] in REVIEWERS):
             raise HubError(403, "only Butler and the boss post reviews")
@@ -632,11 +645,12 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
                 if type_ == "task_request":
                     tc = c.execute(
                         "INSERT INTO tasks(title, details, requester, assignee, status, priority, due, channel, "
-                        "message_id, created_at, updated_at, demo, routine_id, chain_from) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "message_id, created_at, updated_at, demo, routine_id, chain_from, expects_form) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (data["title"], data["details"], author["id"], data["assignee"],
                          "proposed" if needs_ok else "open", data["priority"],
-                         data.get("due"), ch["name"], msg["id"], ts, ts, int(demo), routine_id, chain_from))
+                         data.get("due"), ch["name"], msg["id"], ts, ts, int(demo), routine_id, chain_from,
+                         data.get("expects_form")))
                     msg["task_id"] = tc.lastrowid
                     if needs_ok:
                         # The assignee hears about it only once the boss approves.
@@ -773,10 +787,18 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
         d["routine_id"] = t["routine_id"]
         d["chain_from"] = t["chain_from"]
         d["followup_task_id"] = t["followup_task_id"]
+        d["expects_form"] = t["expects_form"]
+        req = self.q1("SELECT data FROM messages WHERE id=?", (t["message_id"],)) if t["message_id"] else None
+        req_form = _loads(req["data"]).get("form") if req is not None else None
+        if req_form:
+            d["form"] = req_form  # e.g. Amo's setups, handed to Trader by a routine's "then" step
         if t["result_message_id"]:
             r = self.message(t["result_message_id"])
             if r is not None:
-                d["result"] = {"summary": r["text"], "artifacts": _loads(r["data"]).get("artifacts", [])}
+                rd = _loads(r["data"])
+                d["result"] = {"summary": r["text"], "artifacts": rd.get("artifacts", [])}
+                if rd.get("form"):
+                    d["result"]["form"] = rd["form"]
         return d
 
     def tasks(self, member, assignee=None, status=None, channel=None):

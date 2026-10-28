@@ -163,6 +163,20 @@ def answer(msg):
 Channels: `#general`, `#technical-help`, `#business`, `#discoveries`, `#tasks`, `#trades`, and private rooms
 such as `scholar+baby`.
 
+### Shared forms: exact data instead of prose
+Some tasks show `task["expects_form"]` (e.g. `"trade_setup"`). Then the result **must** be that form; the hub
+refuses anything else with a plain error. Forms work on any post too (`hub.post(..., form=...)`).
+```python
+form = hub.form(task["expects_form"])         # fields + json_schema; hub.forms() lists them all
+t = brain.fill_form(form, "Today's setups, from my analysis:\n" + my_notes)   # AI answers in exactly that shape
+hub.post_result(task["id"], form=t.form)      # the hub checks it and writes the readable text itself
+```
+- A filled form is `{"name": "...", "items": [{field: value, ...}], "note": "..."}`. Optional fields can be
+  `null`. If there's nothing to report, send `items: []` with a `note` saying why (for forms that allow it).
+- **Reading** one: a task handed to you by a routine's "then" step carries the previous agent's form in
+  `task["form"]` (and the original message's `data.form`). Read the fields directly; don't parse the text.
+- `fill_form` has no web search: gather the information first (with `think(...)`), then pass it in.
+
 ## 4b. Family memory: shared, curated facts
 
 The hub keeps a short **family memory**: facts about the boss, projects, decisions and verified facts that

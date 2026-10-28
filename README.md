@@ -215,6 +215,22 @@ Today page shows his latest numbers.
   **"then" step** (Routines page → ✏️ Edit). The whole daily loop, the shared setup format and each agent's
   part: [docs/TRADING_WORKFLOW.md](docs/TRADING_WORKFLOW.md).
 
+## 5k. 📋 Shared forms: one format every agent understands
+
+A **form** is a named list of fields, like "Trade setups" (symbol, trigger, stop, targets...). Any message or
+task result can carry a filled-in form, and the hub **checks** it: missing fields, wrong numbers and unknown
+choices are refused with a plain error. So the next agent gets exact data instead of prose to interpret, and
+the page shows it as neat cards.
+
+- **Built in:** the trading forms `trade_setup` (Amo's setups), `setup_scorecard` (Amo grading them) and
+  `trade_report` (Trader's daily report). Add your own on the **⚙️ Admin** page ("📋 Shared forms"): pick
+  field names and types (text, number, choice, numbers, list, yes/no) and save. No coding.
+- **On a routine:** ✏️ Edit → "Answer with form" makes the agent answer in that form; "Their answer form" does
+  the same for the "then" step. A task that expects a form shows "📋 answer with the ... form", and the hub
+  won't accept a result in any other shape.
+- **For agents:** `GET /api/forms/<name>` includes a JSON schema. `family_brain.py`'s `fill_form(...)` gives
+  it to the AI (Claude or Ollama), so the answer always comes back in the right shape.
+
 ## 6. The anti-chatter rules
 
 The server enforces these. It never relies on agents behaving.
@@ -307,6 +323,9 @@ GET  /api/routines                            routines (boss: all; agents: their
 POST /api/routines · POST /api/routines/<id> · POST /api/routines/<id>/run · DELETE   (boss only)
 POST /api/files?channel=&name=                upload (raw bytes, Content-Type header) -> {id, name, mime, size, ...}
 GET  /api/files/<id>                          download (add ?inline=1 to preview an image) · DELETE (boss)
+GET  /api/forms                               the shared forms
+GET  /api/forms/<name>                        one form, with its json_schema
+POST /api/admin/forms · DELETE /api/admin/forms/<name>    add/edit, delete a form  (boss only)
 GET  /api/budget                              my cloud budget this month (boss: everyone's)
 POST /api/budget/check                        {estimate_usd} -> {allowed, remaining, reason}
 POST /api/budget/usage                        {model, input_tokens, output_tokens, cost_usd}
@@ -323,6 +342,10 @@ GET  /api/search?q=                           full-text search (respects private
 GET  /api/summary?hours=24                    the Today page: waiting, findings, finished, agents, upcoming
 GET  /api/brief                               < 1 KB summary for small screens (ESP32)
 ```
+
+Optional in any POST that creates a message: `"form": {"name": "trade_setup", "items": [{...}], "note": "..."}`
+(a filled-in shared form; the hub checks it and writes the text for you if `text` is empty). On a
+`task_request`, `"expects_form": "<name>"` makes the result require that form.
 
 Optional in any POST that creates a message: `"client_id": "<your unique id>"`. Sending the same id again
 returns the first message (with `"already_received": true`) instead of posting twice.

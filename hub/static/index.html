@@ -232,6 +232,12 @@ textarea.field { width: 100%; resize: vertical; }
 .tl-row.tl-off { opacity: .55; } .tl-row.tl-off::before { background: var(--mut); }
 .tl-row.then { padding-left: 26px; } .tl-row.then::before { display: none; }
 .tl-time { width: 72px; flex: none; font-variant-numeric: tabular-nums; color: var(--mut); font-size: 12.5px; }
+.fitems { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin-top: 8px; }
+.fitem { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--card); font-size: 12.5px; }
+.fitem .fh { font-weight: 600; font-size: 13.5px; margin-bottom: 4px; }
+.fitem dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; }
+.fitem dt { color: var(--mut); } .fitem dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.fform-title { font-size: 12px; color: var(--mut); margin-top: 8px; }
 .list { display: flex; flex-direction: column; gap: 8px; padding: 0 22px 22px; }
 .item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); cursor: pointer; }
 .item.unread { border-left: 3px solid var(--acc); }
@@ -424,6 +430,7 @@ async function loadCore() {
   S.memberList = mem.members; S.members = Object.fromEntries(mem.members.map(m => [m.id, m]));
   S.channels = ch.channels; S.tasks = tasks.tasks;
   S.memPending = S.me.kind === "boss" ? (await api("/api/memory?status=proposed")).memories : [];
+  if (!S.forms || S.formsStale) { S.forms = Object.fromEntries((await api("/api/forms")).forms.map(f => [f.name, f])); S.formsStale = false; }
 }
 async function loadSide() {
   const [act, stats] = await Promise.all([api("/api/activity?limit=8"), api("/api/stats")]);
@@ -514,9 +521,10 @@ function cardHTML(m, { inThread = false } = {}) {
         ${d.priority && d.priority !== "normal" ? `<span class="prio-${d.priority}">${d.priority} priority</span>` : ""}</div>
         <h3>${esc(d.title)}</h3><div class="txt">${fmt(d.details)}</div>
         <div class="sub" style="margin-top:6px">Assigned to ${avatar(d.assignee, "xs")} <b>${esc(member(d.assignee).name)}</b>${d.due ? " · due " + esc(d.due) : ""}</div>
+        ${t.expects_form ? `<div class="sub">📋 answer with the <b>${esc(((S.forms || {})[t.expects_form] || {}).title || t.expects_form)}</b> form</div>` : ""}
         ${t.chain_from && taskById(t.chain_from) ? `<div class="sub">⬅ started by <a href="#" data-thread="${taskById(t.chain_from).message_id}">${esc(member(taskById(t.chain_from).assignee).name)}'s result (task #${t.chain_from})</a></div>` : ""}
         ${t.followup_task_id && taskById(t.followup_task_id) ? `<div class="sub">➜ handed to <a href="#" data-thread="${taskById(t.followup_task_id).message_id}">${esc(member(taskById(t.followup_task_id).assignee).name)} (task #${t.followup_task_id})</a></div>` : ""}
-        ${t.result ? `<div class="box result-box">✅ <b>Result:</b> ${fmt(t.result.summary)}</div>` : ""}
+        ${t.result ? `<div class="box result-box">✅ <b>Result:</b> ${t.result.form ? formHTML(t.result.form) : fmt(t.result.summary)}</div>` : ""}
         ${approveButtons(t)}</div>`;
       break;
     }
@@ -545,6 +553,7 @@ function cardHTML(m, { inThread = false } = {}) {
       break;
     }
   }
+  content += formHTML(d.form);
   content += attachmentsHTML(m.attachments);
   const replies = m.reply_count || 0;
   return `<article class="card ${m.author === "boss" ? "mine" : ""}" data-id="${m.id}">
@@ -565,6 +574,26 @@ function approveButtons(t, compact = false) {
     <button class="btn sm pri" data-approve="${t.id}">👍 Approve</button><button class="btn sm" data-decline="${t.id}">👎 Decline</button></div>`;
 }
 
+function fval(v) {
+  if (v === null || v === undefined || v === "") return "";
+  if (Array.isArray(v)) return v.map(fval).join(", ");
+  if (typeof v === "boolean") return v ? "yes" : "no";
+  if (typeof v === "number") return v.toLocaleString([], { maximumFractionDigits: 6 });
+  return String(v);
+}
+function formHTML(f) {
+  if (!f || !f.name) return "";
+  const def = (S.forms || {})[f.name] || { title: f.name, fields: Object.keys(f.items[0] || {}).map(n => ({ name: n })) };
+  const choiceNames = def.fields.filter(x => x.type === "choice").map(x => x.name);
+  const head = it => [def.fields[0] && it[def.fields[0].name], ...choiceNames.slice(0, 2).map(n => it[n])].filter(v => v !== null && v !== undefined && v !== "").map(fval).join(" · ");
+  return `<div class="fform-title">📋 ${esc(def.title)}${def.list ? ` · ${plural(f.items.length, "item")}` : ""}</div>
+    ${f.items.length ? `<div class="fitems">${f.items.map((it, i) => `<div class="fitem"><div class="fh">${def.list ? (i + 1) + ". " : ""}${esc(head(it))}</div>
+      <dl>${def.fields.slice(1).filter(x => !choiceNames.slice(0, 2).includes(x.name) && fval(it[x.name]) !== "").map(x => `<dt>${esc(x.name.replace(/_/g, " "))}</dt><dd>${esc(fval(it[x.name]))}</dd>`).join("")}</dl></div>`).join("")}</div>` : ""}
+    ${f.note ? `<div class="hint" style="margin-top:6px">${fmt(f.note)}</div>` : ""}`;
+}
+function formOptions(sel, none = "No form (free text)") {
+  return `<option value="">${none}</option>` + Object.values(S.forms || {}).map(f => `<option value="${esc(f.name)}" ${f.name === sel ? "selected" : ""}>📋 ${esc(f.title)}</option>`).join("");
+}
 function fileSize(n) { return n < 1024 ? n + " B" : n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
 function attachmentsHTML(list) {
   if (!list || !list.length) return "";
@@ -1055,10 +1084,12 @@ async function viewRoutines() {
       <label data-for="time">At<input class="field" name="at" type="time" value="09:00"></label>
       <label data-for="hours">Every … hours<input class="field" name="hours" type="number" min="1" max="168" value="6"></label>
       <label>Priority<select class="field" name="priority"><option>low</option><option selected>normal</option><option>high</option></select></label>
+      <label>Answer with form<select class="field" name="form">${formOptions()}</select></label>
       <label style="grid-column:1/-1;margin-top:6px"><b style="color:var(--ink)">➜ Then (optional): hand the result to</b></label>
       <label>Next agent<select class="field" name="then_assignee"><option value="">Nobody (stop here)</option>${agentOptions()}</select></label>
       <label>Their task title<input class="field" name="then_title" maxlength="200" placeholder="Trade plan"></label>
       <label>Their channel<select class="field" name="then_channel">${S.channels.map(c => `<option ${c.name === "tasks" ? "selected" : ""} value="${esc(c.name)}">${c.private ? "🔒 " : "#"}${esc(c.name)}</option>`).join("")}</select></label>
+      <label>Their answer form<select class="field" name="then_form">${formOptions()}</select></label>
       <label style="flex-direction:row;display:flex;align-items:center;gap:6px"><input type="checkbox" name="then_approval"> Wait for my 👍 first</label>
       <label style="grid-column:1/-1">What they should do with it<textarea class="field" name="then_details" rows="2" placeholder="e.g. Trade these setups if they trigger and you can trade them on your market. Report each one."></textarea></label>
       <label>&nbsp;<span class="row"><button class="btn pri" id="routineSave">Add routine</button><button type="button" class="btn" id="routineCancel" hidden>Cancel</button></span></label>
@@ -1085,6 +1116,8 @@ async function viewRoutines() {
     x.then_details.value = r.then ? r.then.details : "";
     x.then_channel.value = r.then ? r.then.channel : "tasks";
     x.then_approval.checked = !!(r.then && r.then.approval);
+    x.form.value = r.form || "";
+    x.then_form.value = r.then ? (r.then.form || "") : "";
     sync();
     $("#routineFormTitle").textContent = "Edit: " + r.title; $("#routineSave").textContent = "Save changes"; $("#routineCancel").hidden = false;
     f.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1095,7 +1128,8 @@ async function viewRoutines() {
     const body = { title: x.title.value, details: x.details.value, assignee: x.assignee.value,
       channel: x.channel.value, every: x.every.value, weekday: +x.weekday.value, at: x.at.value, hours: +x.hours.value, priority: x.priority.value,
       then_assignee: x.then_assignee.value, then_title: x.then_title.value, then_details: x.then_details.value,
-      then_channel: x.then_channel.value, then_approval: x.then_approval.checked };
+      then_channel: x.then_channel.value, then_approval: x.then_approval.checked,
+      form: x.form.value, then_form: x.then_form.value };
     try {
       if (S.editRoutine) { await api(`/api/routines/${S.editRoutine}`, { method: "POST", body }); toast("Routine saved 🔁"); }
       else { await api("/api/routines", { method: "POST", body }); toast("Routine added 🔁"); }
@@ -1125,6 +1159,7 @@ async function loadRoutines() {
       ${x.enabled ? "" : '<span class="tag">paused</span>'}${x.demo ? '<span class="tag">demo</span>' : ""}</div>
     <div class="hint">${esc(member(x.assignee).name)} · ${(S.channels.find(c => c.name === x.channel) || {}).private ? "🔒 " : "#"}${esc(x.channel)} · next: ${x.enabled ? whenAt(x.next_run) : "—"} · last: ${whenAt(x.last_run)}${x.skipped ? ` · skipped ${plural(x.skipped, "time")} (last task unfinished)` : ""}</div>
     <div class="snip">${esc(x.details)}</div>
+    ${x.form ? `<div class="hint" style="margin-top:4px">📋 answered with the ${esc(((S.forms || {})[x.form] || {}).title || x.form)} form</div>` : ""}
     ${x.then ? `<div class="hint" style="margin-top:4px">➜ then ${esc(member(x.then.assignee).emoji)} <b>${esc(member(x.then.assignee).name)}</b>: “${esc(x.then.title)}” in #${esc(x.then.channel)}${x.then.approval ? " · waits for your 👍" : " · starts right away"}</div>` : ""}
     <div class="row" style="margin-top:6px"><button class="btn sm" data-routine-run="${x.id}">▶ Run now</button>
       <button class="btn sm" data-routine-edit="${x.id}">✏️ Edit</button>
@@ -1167,6 +1202,20 @@ async function viewAdmin() {
     <div class="section"><h2>Anti-chatter rules</h2>
       <form id="rules" class="grid2"></form>
       <p class="hint">You are never limited. To remove the demo conversation, run <code>hub seed --wipe-demo</code> in the terminal.</p></div>
+    <div class="section"><h2>📋 Shared forms</h2>
+      <p class="hint">Fill-in-the-blank formats every agent understands. The hub checks every filled-in form, and agents' AI is shaped to fill them in exactly.
+      Use them on routines ("Answer with form"). Built-in forms can be edited but not deleted.</p>
+      <div id="formList"></div>
+      <form id="formEdit" class="grid2" style="margin-top:10px">
+        <label>Form id (lowercase, _)<input class="field" name="name" placeholder="weekly_review" required></label>
+        <label>Title<input class="field" name="title" placeholder="Weekly review"></label>
+        <label style="grid-column:1/-1">What it's for<input class="field" name="description" placeholder="One line for the agents"></label>
+        <label style="flex-direction:row;display:flex;align-items:center;gap:6px"><input type="checkbox" name="list" checked> A list (several items)</label>
+        <label style="flex-direction:row;display:flex;align-items:center;gap:6px"><input type="checkbox" name="allow_empty"> Can be empty, with a note</label>
+        <div style="grid-column:1/-1" id="fieldRows"></div>
+        <label><button type="button" class="btn" id="addField">＋ Add field</button></label>
+        <label><span class="row"><button class="btn pri">Save form</button><button type="button" class="btn" id="newForm">New form</button></span></label>
+      </form></div>
     <div class="section"><h2>☁️ Cloud AI budgets</h2>
       <p class="hint">How much each agent may spend on cloud AI per month. $0 = local AI only. Agents ask the hub before every cloud call,
       and fall back to their local model when the budget is used up. You get an Inbox note at 80% and 100%.
@@ -1186,6 +1235,7 @@ async function viewAdmin() {
   };
   loadBackups();
   loadBudgets();
+  setupFormEditor();
   $("#saveBudgets").onclick = async () => {
     try {
       for (const inp of $$("[data-budget]")) await api("/api/admin/budget", { method: "POST", body: { member: inp.dataset.budget, usd: +inp.value || 0 } });
@@ -1218,6 +1268,46 @@ async function viewAdmin() {
     try { await api("/api/admin/settings", { method: "PUT", body }); toast("Rules saved"); } catch (x) { toast(x.message, true); }
   };
   renderAdminParts(ov);
+}
+const FIELD_TYPES = { text: "Text", number: "Number", choice: "Choice (pick one)", numbers: "Numbers (list)", list: "Text list", yesno: "Yes / no" };
+function fieldRow(f = {}) {
+  return `<div class="row" data-frow style="margin-bottom:6px">
+    <input class="field" data-k="name" placeholder="field name" value="${esc(f.name || "")}" style="width:140px">
+    <select class="field" data-k="type">${Object.entries(FIELD_TYPES).map(([k, l]) => `<option value="${k}" ${f.type === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+    <input class="field" data-k="choices" placeholder="choices: a, b, c" value="${esc((f.choices || []).join(", "))}" style="width:160px">
+    <input class="field grow" data-k="help" placeholder="hint for the agents (optional)" value="${esc(f.help || "")}">
+    <label class="hint"><input type="checkbox" data-k="required" ${f.required ? "checked" : ""}> required</label>
+    <button type="button" class="btn sm danger" data-del-field>✕</button></div>`;
+}
+function renderFormList() {
+  $("#formList").innerHTML = Object.values(S.forms || {}).map(f => `<div class="p-row"><span>📋</span><div class="grow"><b>${esc(f.title)}</b> <span class="hint">${esc(f.name)}${f.builtin ? " · built-in" : ""}</span>
+      <div class="hint">${f.fields.map(x => esc(x.name) + (x.required ? "*" : "")).join(", ")}</div></div>
+      <button class="btn sm" data-edit-form="${esc(f.name)}">✏️ Edit</button>${f.builtin ? "" : `<button class="btn sm danger" data-delete-form="${esc(f.name)}">Delete</button>`}</div>`).join("");
+}
+function loadFormIntoEditor(f) {
+  const x = $("#formEdit").elements;
+  x.name.value = f ? f.name : ""; x.name.readOnly = !!f; x.title.value = f ? f.title : ""; x.description.value = f ? (f.description || "") : "";
+  x.list.checked = f ? f.list : true; x.allow_empty.checked = f ? !!f.allow_empty : false;
+  $("#fieldRows").innerHTML = (f ? f.fields : [{ name: "", type: "text", required: true }]).map(fieldRow).join("");
+}
+function setupFormEditor() {
+  renderFormList(); loadFormIntoEditor(null);
+  $("#addField").onclick = () => $("#fieldRows").insertAdjacentHTML("beforeend", fieldRow({ type: "text" }));
+  $("#newForm").onclick = () => loadFormIntoEditor(null);
+  $("#fieldRows").addEventListener("click", e => { if (e.target.closest("[data-del-field]")) { e.stopPropagation(); e.target.closest("[data-frow]").remove(); } });
+  $("#formEdit").onsubmit = async e => {
+    e.preventDefault();
+    const x = e.target.elements;
+    const fields = $$("[data-frow]").map(r => {
+      const get = k => $(`[data-k=${k}]`, r);
+      return { name: get("name").value.trim(), type: get("type").value, choices: get("choices").value, help: get("help").value.trim(), required: get("required").checked };
+    }).filter(f => f.name);
+    try {
+      await api("/api/admin/forms", { method: "POST", body: { name: x.name.value.trim(), title: x.title.value.trim(), description: x.description.value.trim(),
+        list: x.list.checked, allow_empty: x.allow_empty.checked, fields } });
+      toast("Form saved 📋"); S.formsStale = true; await refreshCore(); renderFormList(); loadFormIntoEditor(null);
+    } catch (err) { toast(err.message, true); }
+  };
 }
 async function loadBudgets() {
   if (!$("#budgetRows")) return;
@@ -1283,6 +1373,11 @@ document.addEventListener("click", async e => {
       await downloadAuthed(`/api/files/${d.downloadFile}`, d.name || "file");
     } else if (d.downloadBackup) {
       await downloadAuthed(`/api/admin/backups/${encodeURIComponent(d.downloadBackup)}`, d.downloadBackup);
+    } else if (d.editForm) {
+      loadFormIntoEditor((S.forms || {})[d.editForm]); $("#formEdit").scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (d.deleteForm) {
+      if (!confirm("Delete the form '" + d.deleteForm + "'? Messages that used it keep their data.")) return;
+      await api(`/api/admin/forms/${d.deleteForm}`, { method: "DELETE" }); S.formsStale = true; await refreshCore(); renderFormList();
     } else if (d.routineEdit) {
       const r = (S.routineList || []).find(x => x.id === +d.routineEdit); if (r && S.startRoutineEdit) S.startRoutineEdit(r);
     } else if (d.routineRun) {
@@ -1453,6 +1548,7 @@ async function live() {
       const r = await api(`/api/events?after=${S.last ?? 0}&wait=25`);
       setLive(true);
       S.last = r.last;
+      if (r.events.some(ev => ev.kind === "form")) S.formsStale = true;
       if (r.events.length) refreshSoon(150);
     } catch (x) {
       if (x.status === 401) break;

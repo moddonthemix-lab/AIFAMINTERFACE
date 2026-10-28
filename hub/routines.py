@@ -72,8 +72,10 @@ class RoutinesMixin:
         d["enabled"] = bool(r["enabled"])
         d["demo"] = bool(r["demo"])
         d["schedule"] = describe(r)
+        d["form"] = r["form"]
         d["then"] = {"assignee": r["then_assignee"], "title": r["then_title"], "details": r["then_details"],
-                     "channel": r["then_channel"], "approval": bool(r["then_approval"])} if r["then_assignee"] else None
+                     "channel": r["then_channel"], "approval": bool(r["then_approval"]),
+                     "form": r["then_form"]} if r["then_assignee"] else None
         return d
 
     def chain_followup(self, tid):
@@ -84,7 +86,7 @@ class RoutinesMixin:
         r = self.q1("SELECT * FROM routines WHERE id=?", (t["routine_id"],))
         if r is None or not r["then_assignee"] or self.member(r["then_assignee"]) is None:
             return None
-        files = []
+        files, carried_form = [], None
         if t["result_message_id"]:
             res = self.message(t["result_message_id"])
             text = res["text"]
@@ -94,6 +96,7 @@ class RoutinesMixin:
                 text += "\nArtifacts: " + ", ".join(extra)
             if r["then_channel"] == t["channel"]:
                 files = data.get("files") or []
+            carried_form = data.get("form")
         else:
             last = self.q1("SELECT text FROM messages WHERE reply_to=? AND type='task_update' ORDER BY id DESC LIMIT 1",
                            (t["message_id"],))
@@ -106,6 +109,10 @@ class RoutinesMixin:
         data = {"title": r["then_title"], "details": details, "assignee": r["then_assignee"], "priority": r["priority"]}
         if files:
             data["files"] = files
+        if carried_form:
+            data["form"] = carried_form  # the next agent gets the exact data, not just the text
+        if r["then_form"]:
+            data["expects_form"] = r["then_form"]
         msg = self.post_message(self.member("boss"), r["then_channel"], "task_request", data=data, enforce=False,
                                 routine_id=r["id"], chain_from=t["id"], proposed=bool(r["then_approval"]))
         with self.tx() as c:
@@ -164,7 +171,9 @@ class RoutinesMixin:
         out = {"title": title, "details": details or title, "assignee": assignee["id"], "channel": ch["name"],
                "priority": priority, "every": every, "at": at, "weekday": weekday, "hours": hours,
                "then_assignee": None, "then_title": None, "then_details": None, "then_channel": None,
-               "then_approval": 0}
+               "then_approval": 0, "form": None, "then_form": None}
+        if f.get("form"):
+            out["form"] = self.form(f["form"])["name"]
         nxt = (f.get("then_assignee") or "").strip().lower()
         if nxt:
             who = self.member(nxt)
@@ -178,7 +187,8 @@ class RoutinesMixin:
             if len(then_title) > MAX_TITLE or len(then_details) > self.settings["max_text"]:
                 raise HubError(400, "the 'then' step's title or details are too long")
             out.update(then_assignee=who["id"], then_title=then_title, then_details=then_details or then_title,
-                       then_channel=then_ch["name"], then_approval=int(bool(f.get("then_approval"))))
+                       then_channel=then_ch["name"], then_approval=int(bool(f.get("then_approval"))),
+                       then_form=self.form(f["then_form"])["name"] if f.get("then_form") else None)
         return out
 
     def create_routine(self, fields, demo=False):
@@ -187,11 +197,11 @@ class RoutinesMixin:
         with self.tx() as c:
             cur = c.execute(
                 "INSERT INTO routines(title, details, assignee, channel, priority, every, at, weekday, hours, "
-                "next_run, created_at, demo, then_assignee, then_title, then_details, then_channel, then_approval) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "next_run, created_at, demo, then_assignee, then_title, then_details, then_channel, then_approval, "
+                "form, then_form) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (r["title"], r["details"], r["assignee"], r["channel"], r["priority"], r["every"], r["at"],
                  r["weekday"], r["hours"], next_run(r, now), now, int(demo), r["then_assignee"], r["then_title"],
-                 r["then_details"], r["then_channel"], r["then_approval"]))
+                 r["then_details"], r["then_channel"], r["then_approval"], r["form"], r["then_form"]))
             self._event(c, "routine", {"id": cur.lastrowid}, member="boss")
         return self.routine_dict(self._routine(cur.lastrowid))
 
@@ -204,10 +214,11 @@ class RoutinesMixin:
         with self.tx() as c:
             c.execute("UPDATE routines SET title=?, details=?, assignee=?, channel=?, priority=?, every=?, at=?, "
                       "weekday=?, hours=?, enabled=?, next_run=?, then_assignee=?, then_title=?, then_details=?, "
-                      "then_channel=?, then_approval=? WHERE id=?",
+                      "then_channel=?, then_approval=?, form=?, then_form=? WHERE id=?",
                       (r["title"], r["details"], r["assignee"], r["channel"], r["priority"], r["every"], r["at"],
                        r["weekday"], r["hours"], enabled, next_run(r, time.time()), r["then_assignee"],
-                       r["then_title"], r["then_details"], r["then_channel"], r["then_approval"], rid))
+                       r["then_title"], r["then_details"], r["then_channel"], r["then_approval"], r["form"],
+                       r["then_form"], rid))
             self._event(c, "routine", {"id": rid}, member="boss")
         return self.routine_dict(self._routine(rid))
 
@@ -228,6 +239,7 @@ class RoutinesMixin:
             return None
         msg = self.post_message(self.member("boss"), r["channel"], "task_request", data={
             "title": r["title"], "details": r["details"], "assignee": r["assignee"], "priority": r["priority"],
+            **({"expects_form": r["form"]} if r["form"] else {}),
         }, enforce=False, demo=bool(r["demo"]), routine_id=rid)
         with self.tx() as c:
             c.execute("UPDATE routines SET last_run=?, last_task_id=?, next_run=? WHERE id=?",

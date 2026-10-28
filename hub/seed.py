@@ -30,6 +30,7 @@ FAMILY = [
 def setup(hub):
     """Create anything missing. Safe to run every start. Returns a new boss token, if one was made."""
     token = hub.ensure_boss()
+    hub.ensure_builtin_forms()
     # #markets became #trades: rename an existing one instead of keeping both.
     if hub.channel("markets") is not None and hub.channel("trades") is None:
         hub.rename_channel("markets", "trades")
@@ -46,6 +47,7 @@ def setup(hub):
             hub.create_channel(name, purpose, private=True, members=members)
     _seed_once(hub, "trader_daily_report", lambda: _trader_report_routine(hub))
     _seed_once(hub, "amo_grade_setups", lambda: _amo_grading_routine(hub))
+    _seed_once(hub, "trading_forms_on_routines", lambda: _trading_forms(hub))
     return token
 
 
@@ -87,6 +89,15 @@ def _amo_grading_routine(hub):
                    "Use the format in the hub's docs/TRADING_WORKFLOW.md.",
     })
     hub.update_routine(r["id"], {"enabled": False})
+
+
+def _trading_forms(hub):
+    """Ask for the shared trading forms on the trading routines that already exist."""
+    for r in hub.q("SELECT id, title, assignee FROM routines WHERE form IS NULL"):
+        if r["assignee"] == "amo" and r["title"] == "Grade today's setups":
+            hub.update_routine(r["id"], {"form": "setup_scorecard"})
+        elif r["assignee"] == "trader" and r["title"] == "Daily trading report":
+            hub.update_routine(r["id"], {"form": "trade_report"})
 
 
 def has_demo(hub):

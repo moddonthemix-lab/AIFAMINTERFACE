@@ -195,6 +195,13 @@ CREATE TABLE IF NOT EXISTS pnl (
     PRIMARY KEY (member, day, mode)
 );
 
+CREATE TABLE IF NOT EXISTS forms (
+    name        TEXT PRIMARY KEY,
+    definition  TEXT NOT NULL,              -- JSON: title, description, list, allow_empty, fields
+    builtin     INTEGER NOT NULL DEFAULT 0,
+    updated_at  REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL
@@ -227,6 +234,9 @@ MIGRATIONS = [
     ("routines", "then_approval", "INTEGER NOT NULL DEFAULT 0"),  # 1 = the next step waits for the boss's OK
     ("tasks", "chain_from", "INTEGER"),                         # the task whose result started this one
     ("tasks", "followup_task_id", "INTEGER"),                   # the task this one's result started
+    ("tasks", "expects_form", "TEXT"),                          # the shared form the result must use
+    ("routines", "form", "TEXT"),                               # form the routine's task must be answered with
+    ("routines", "then_form", "TEXT"),                          # form the "then" task must be answered with
 ]
 
 

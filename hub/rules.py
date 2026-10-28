@@ -64,7 +64,8 @@ def check(conn, settings, author, channel, type_, text, data, root, thread_state
         raise RuleViolation(429, "rate_day",
                             f"Too many messages today: the limit is {settings['rate_per_day']} per day.")
 
-    if type_ == "post" and not (root is not None and root["type"] in ANSWERABLE):
+    # A post carrying a filled-in shared form is structured content, not chatter.
+    if type_ == "post" and not data.get("form") and not (root is not None and root["type"] in ANSWERABLE):
         if not (channel["name"] in FREE_POST_CHANNELS or channel["private"]):
             raise RuleViolation(
                 422, "post_not_allowed",

@@ -219,6 +219,14 @@ MIGRATIONS = [
     ("inbox", "memory_id", "INTEGER"),                          # a family-memory item this is about
     ("tasks", "routine_id", "INTEGER"),                         # set when a routine created the task
     ("members", "cloud_budget_usd", "REAL NOT NULL DEFAULT 0"), # monthly cloud AI budget; 0 = local only
+    # Routine "then" steps: when the routine's task is done, hand its result to the next agent.
+    ("routines", "then_assignee", "TEXT"),
+    ("routines", "then_title", "TEXT"),
+    ("routines", "then_details", "TEXT"),
+    ("routines", "then_channel", "TEXT"),
+    ("routines", "then_approval", "INTEGER NOT NULL DEFAULT 0"),  # 1 = the next step waits for the boss's OK
+    ("tasks", "chain_from", "INTEGER"),                         # the task whose result started this one
+    ("tasks", "followup_task_id", "INTEGER"),                   # the task this one's result started
 ]
 
 

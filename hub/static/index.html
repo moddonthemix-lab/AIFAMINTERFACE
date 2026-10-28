@@ -226,6 +226,12 @@ textarea.field { width: 100%; resize: vertical; }
 .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.15); white-space: nowrap; max-width: 260px; }
 .tip b { display: block; font-size: 14px; }
 .tip span { color: var(--mut); display: block; white-space: normal; }
+.timeline { margin: 0 22px 16px; padding: 4px 0 4px 18px; border-left: 2px solid var(--line); }
+.tl-row { position: relative; display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.tl-row::before { content: ""; position: absolute; left: -24px; width: 10px; height: 10px; border-radius: 50%; background: var(--acc); border: 2px solid var(--bg); }
+.tl-row.tl-off { opacity: .55; } .tl-row.tl-off::before { background: var(--mut); }
+.tl-row.then { padding-left: 26px; } .tl-row.then::before { display: none; }
+.tl-time { width: 72px; flex: none; font-variant-numeric: tabular-nums; color: var(--mut); font-size: 12.5px; }
 .list { display: flex; flex-direction: column; gap: 8px; padding: 0 22px 22px; }
 .item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); cursor: pointer; }
 .item.unread { border-left: 3px solid var(--acc); }
@@ -508,6 +514,8 @@ function cardHTML(m, { inThread = false } = {}) {
         ${d.priority && d.priority !== "normal" ? `<span class="prio-${d.priority}">${d.priority} priority</span>` : ""}</div>
         <h3>${esc(d.title)}</h3><div class="txt">${fmt(d.details)}</div>
         <div class="sub" style="margin-top:6px">Assigned to ${avatar(d.assignee, "xs")} <b>${esc(member(d.assignee).name)}</b>${d.due ? " · due " + esc(d.due) : ""}</div>
+        ${t.chain_from && taskById(t.chain_from) ? `<div class="sub">⬅ started by <a href="#" data-thread="${taskById(t.chain_from).message_id}">${esc(member(taskById(t.chain_from).assignee).name)}'s result (task #${t.chain_from})</a></div>` : ""}
+        ${t.followup_task_id && taskById(t.followup_task_id) ? `<div class="sub">➜ handed to <a href="#" data-thread="${taskById(t.followup_task_id).message_id}">${esc(member(taskById(t.followup_task_id).assignee).name)} (task #${t.followup_task_id})</a></div>` : ""}
         ${t.result ? `<div class="box result-box">✅ <b>Result:</b> ${fmt(t.result.summary)}</div>` : ""}
         ${approveButtons(t)}</div>`;
       break;
@@ -1034,8 +1042,10 @@ async function viewRoutines() {
   setHeader(`
     <div class="view-head"><span class="hico">🔁</span><div class="grow"><h1>Routines</h1>
       <p>Repeating tasks the hub hands out by itself. If the last one isn't finished yet, that turn is skipped, so work never piles up.</p></div></div>
+    <div class="section"><h2>🗓️ Your family's day</h2><p class="hint" style="margin:0 0 6px">Every routine in time order. ➜ arrows show a routine handing its result to the next agent.</p></div>
+    <div class="timeline" id="routineTimeline"></div>
     <div class="list" id="routineList"><div class="empty">Loading…</div></div>
-    <div class="section"><h2>New routine</h2><form id="routineAdd" class="grid2">
+    <div class="section"><h2 id="routineFormTitle">New routine</h2><form id="routineAdd" class="grid2">
       <label style="grid-column:1/-1">Task title<input class="field" name="title" maxlength="200" placeholder="Find 3 new income ideas" required></label>
       <label style="grid-column:1/-1">Details<textarea class="field" name="details" rows="2" placeholder="What should be done each time, and what a good result looks like."></textarea></label>
       <label>Who<select class="field" name="assignee">${agentOptions()}</select></label>
@@ -1045,7 +1055,13 @@ async function viewRoutines() {
       <label data-for="time">At<input class="field" name="at" type="time" value="09:00"></label>
       <label data-for="hours">Every … hours<input class="field" name="hours" type="number" min="1" max="168" value="6"></label>
       <label>Priority<select class="field" name="priority"><option>low</option><option selected>normal</option><option>high</option></select></label>
-      <label>&nbsp;<button class="btn pri">Add routine</button></label>
+      <label style="grid-column:1/-1;margin-top:6px"><b style="color:var(--ink)">➜ Then (optional): hand the result to</b></label>
+      <label>Next agent<select class="field" name="then_assignee"><option value="">Nobody (stop here)</option>${agentOptions()}</select></label>
+      <label>Their task title<input class="field" name="then_title" maxlength="200" placeholder="Trade plan"></label>
+      <label>Their channel<select class="field" name="then_channel">${S.channels.map(c => `<option ${c.name === "tasks" ? "selected" : ""} value="${esc(c.name)}">${c.private ? "🔒 " : "#"}${esc(c.name)}</option>`).join("")}</select></label>
+      <label style="flex-direction:row;display:flex;align-items:center;gap:6px"><input type="checkbox" name="then_approval"> Wait for my 👍 first</label>
+      <label style="grid-column:1/-1">What they should do with it<textarea class="field" name="then_details" rows="2" placeholder="e.g. Trade these setups if they trigger and you can trade them on your market. Report each one."></textarea></label>
+      <label>&nbsp;<span class="row"><button class="btn pri" id="routineSave">Add routine</button><button type="button" class="btn" id="routineCancel" hidden>Cancel</button></span></label>
     </form><p class="hint" id="hubTime"></p></div>`);
   const f = $("#routineAdd");
   const sync = () => {
@@ -1055,13 +1071,35 @@ async function viewRoutines() {
     $("[data-for=hours]", f).hidden = ev !== "hours";
   };
   f.elements.every.onchange = sync; sync();
+  const endEdit = () => {
+    S.editRoutine = null; f.reset(); sync();
+    $("#routineFormTitle").textContent = "New routine"; $("#routineSave").textContent = "Add routine"; $("#routineCancel").hidden = true;
+  };
+  $("#routineCancel").onclick = endEdit;
+  S.startRoutineEdit = r => {
+    const x = f.elements;
+    S.editRoutine = r.id;
+    for (const k of ["title", "details", "assignee", "channel", "every", "weekday", "at", "hours", "priority"]) x[k].value = r[k];
+    x.then_assignee.value = r.then ? r.then.assignee : "";
+    x.then_title.value = r.then ? r.then.title : "";
+    x.then_details.value = r.then ? r.then.details : "";
+    x.then_channel.value = r.then ? r.then.channel : "tasks";
+    x.then_approval.checked = !!(r.then && r.then.approval);
+    sync();
+    $("#routineFormTitle").textContent = "Edit: " + r.title; $("#routineSave").textContent = "Save changes"; $("#routineCancel").hidden = false;
+    f.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   f.onsubmit = async e => {
     e.preventDefault();
     const x = f.elements;
+    const body = { title: x.title.value, details: x.details.value, assignee: x.assignee.value,
+      channel: x.channel.value, every: x.every.value, weekday: +x.weekday.value, at: x.at.value, hours: +x.hours.value, priority: x.priority.value,
+      then_assignee: x.then_assignee.value, then_title: x.then_title.value, then_details: x.then_details.value,
+      then_channel: x.then_channel.value, then_approval: x.then_approval.checked };
     try {
-      await api("/api/routines", { method: "POST", body: { title: x.title.value, details: x.details.value, assignee: x.assignee.value,
-        channel: x.channel.value, every: x.every.value, weekday: +x.weekday.value, at: x.at.value, hours: +x.hours.value, priority: x.priority.value } });
-      f.reset(); sync(); toast("Routine added 🔁"); loadRoutines();
+      if (S.editRoutine) { await api(`/api/routines/${S.editRoutine}`, { method: "POST", body }); toast("Routine saved 🔁"); }
+      else { await api("/api/routines", { method: "POST", body }); toast("Routine added 🔁"); }
+      endEdit(); loadRoutines();
     } catch (err) { toast(err.message, true); }
   };
   await loadRoutines();
@@ -1071,13 +1109,25 @@ async function loadRoutines() {
   if (!$("#routineList")) return;
   const r = await api("/api/routines");
   if (S.route.view !== "routines") return;
+  S.routineList = r.routines;
+  const timed = r.routines.filter(x => x.every !== "hours").sort((a, b) => a.at.localeCompare(b.at));
+  const hourly = r.routines.filter(x => x.every === "hours");
+  const when = x => x.every === "week" ? `${DAY_NAMES[x.weekday].slice(0, 3)} ${x.at}` : x.every === "weekday" ? `${x.at} M–F` : x.at;
+  $("#routineTimeline").innerHTML = (timed.concat(hourly)).map(x => `
+    <div class="tl-row ${x.enabled ? "" : "tl-off"}"><span class="tl-time">${x.every === "hours" ? "every " + x.hours + "h" : esc(when(x))}</span>
+      ${avatar(x.assignee, "xs")}<span><b>${esc(member(x.assignee).name)}</b>: ${esc(x.title)}${x.enabled ? "" : ' <span class="tag">paused</span>'}</span></div>
+    ${x.then ? `<div class="tl-row then ${x.enabled ? "" : "tl-off"}"><span class="tl-time">➜ then</span>${avatar(x.then.assignee, "xs")}
+      <span><b>${esc(member(x.then.assignee).name)}</b>: ${esc(x.then.title)}${x.then.approval ? ' <span class="hint">(after your 👍)</span>' : ""}</span></div>` : ""}`).join("")
+    || '<div class="hint">No routines yet.</div>';
   $("#hubTime").textContent = `Times use ${r.time_zone} (it's ${r.hub_time} there now).`;
   $("#routineList").innerHTML = r.routines.length ? r.routines.map(x => `<div class="item" style="cursor:default;${x.enabled ? "" : "opacity:.6"}">
     ${avatar(x.assignee, "sm")}<div class="grow"><div class="row"><b>${esc(x.title)}</b><span class="tag">🔁 ${esc(x.schedule)}</span>
       ${x.enabled ? "" : '<span class="tag">paused</span>'}${x.demo ? '<span class="tag">demo</span>' : ""}</div>
     <div class="hint">${esc(member(x.assignee).name)} · ${(S.channels.find(c => c.name === x.channel) || {}).private ? "🔒 " : "#"}${esc(x.channel)} · next: ${x.enabled ? whenAt(x.next_run) : "—"} · last: ${whenAt(x.last_run)}${x.skipped ? ` · skipped ${plural(x.skipped, "time")} (last task unfinished)` : ""}</div>
     <div class="snip">${esc(x.details)}</div>
+    ${x.then ? `<div class="hint" style="margin-top:4px">➜ then ${esc(member(x.then.assignee).emoji)} <b>${esc(member(x.then.assignee).name)}</b>: “${esc(x.then.title)}” in #${esc(x.then.channel)}${x.then.approval ? " · waits for your 👍" : " · starts right away"}</div>` : ""}
     <div class="row" style="margin-top:6px"><button class="btn sm" data-routine-run="${x.id}">▶ Run now</button>
+      <button class="btn sm" data-routine-edit="${x.id}">✏️ Edit</button>
       <button class="btn sm" data-routine-toggle="${x.id}" data-on="${x.enabled ? 1 : 0}">${x.enabled ? "⏸ Pause" : "▶ Resume"}</button>
       ${x.last_task_id && taskById(x.last_task_id) ? `<button class="btn sm" data-thread="${taskById(x.last_task_id).message_id}">Last task</button>` : ""}
       <span class="grow"></span><button class="btn sm danger" data-routine-delete="${x.id}">Delete</button></div></div></div>`).join("")
@@ -1233,6 +1283,8 @@ document.addEventListener("click", async e => {
       await downloadAuthed(`/api/files/${d.downloadFile}`, d.name || "file");
     } else if (d.downloadBackup) {
       await downloadAuthed(`/api/admin/backups/${encodeURIComponent(d.downloadBackup)}`, d.downloadBackup);
+    } else if (d.routineEdit) {
+      const r = (S.routineList || []).find(x => x.id === +d.routineEdit); if (r && S.startRoutineEdit) S.startRoutineEdit(r);
     } else if (d.routineRun) {
       await api(`/api/routines/${d.routineRun}/run`, { method: "POST", body: {} }); toast("Task created"); refreshSoon(10);
     } else if (d.routineToggle) {

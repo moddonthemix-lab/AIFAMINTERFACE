@@ -59,7 +59,7 @@ def test_routine_validation_and_privacy(hub):
         hub.create_routine({"title": "x", "assignee": "builder", "every": "month"})
     hub.create_routine({"title": "Mine", "assignee": "baby"})
     assert [x["title"] for x in hub.routines(hub.member("baby"))] == ["Mine"]
-    assert hub.routines(hub.member("amo")) == []
+    assert [x["title"] for x in hub.routines(hub.member("amo"))] == ["Grade today's setups"]  # seeded, paused
 
 
 def test_routines_api(api, tokens):
@@ -72,3 +72,48 @@ def test_routines_api(api, tokens):
     s, lst = api("GET", "/api/routines", token=tokens["amo"])
     assert lst["routines"][0]["last_task_id"] == run["task"]["id"] and "hub_time" in lst
     assert api("DELETE", f"/api/routines/{r['id']}", None, tokens["boss"])[0] == 200
+
+
+def test_then_step_hands_the_result_to_the_next_agent(hub):
+    r = hub.create_routine({"title": "Tomorrow's top setups", "assignee": "amo", "channel": "trades",
+                            "every": "weekday", "at": "19:00",
+                            "then_assignee": "trader", "then_title": "Trade plan",
+                            "then_details": "Trade these setups if they trigger and you can trade them."})
+    assert r["then"]["assignee"] == "trader" and r["then"]["approval"] is False
+    t = hub.run_routine(r["id"], force=True)
+    amo = hub.member("amo")
+    hub.update_task(amo, t["id"], "in_progress", "scanning")
+    msg = hub.post_message(amo, "trades", "result", data={"task_id": t["id"],
+                           "summary": "SETUP 1 symbol: AAPL pattern: 2-1-2 trigger: 182.40"})
+    nxt = msg["followup_task"]
+    assert nxt["assignee"] == "trader" and nxt["title"] == "Trade plan" and nxt["status"] == "open"
+    assert "AAPL" in nxt["details"] and nxt["chain_from"] == t["id"] and nxt["routine_id"] == r["id"]
+    assert hub.task(hub.member("boss"), t["id"])["followup_task_id"] == nxt["id"]
+    assert "assignment" in [i["kind"] for i in hub.inbox(hub.member("trader"))]
+    # Finishing the follow-up doesn't start another one, and the step happens only once.
+    done = hub.post_message(hub.member("trader"), "trades", "result",
+                            data={"task_id": nxt["id"], "summary": "Took AAPL, +1.2R"})
+    assert "followup_task" not in done
+    assert hub.chain_followup(t["id"]) is None
+
+
+def test_then_step_can_wait_for_the_boss(hub):
+    r = hub.create_routine({"title": "Setups", "assignee": "amo", "channel": "trades",
+                            "then_assignee": "trader", "then_approval": True})
+    t = hub.run_routine(r["id"], force=True)
+    msg = hub.post_message(hub.member("amo"), "trades", "result", data={"task_id": t["id"], "summary": "list"})
+    assert msg["followup_task"]["status"] == "proposed" and msg["followup_task"]["title"] == "Next: Setups"
+    assert "approval" in [i["kind"] for i in hub.inbox(hub.member("boss"))]
+
+
+def test_then_step_validation_and_editing(hub):
+    with pytest.raises(HubError):
+        hub.create_routine({"title": "x", "assignee": "amo", "then_assignee": "boss"})
+    with pytest.raises(HubError):  # builder can't see the private room
+        hub.create_routine({"title": "x", "assignee": "amo", "then_assignee": "builder",
+                            "then_channel": "scholar+baby"})
+    r = hub.create_routine({"title": "Setups", "assignee": "amo", "channel": "trades"})
+    r = hub.update_routine(r["id"], {"then_assignee": "trader", "details": "New wording", "at": "18:30"})
+    assert r["then"]["assignee"] == "trader" and r["details"] == "New wording" and r["at"] == "18:30"
+    r = hub.update_routine(r["id"], {"then_assignee": ""})
+    assert r["then"] is None

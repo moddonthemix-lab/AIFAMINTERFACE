@@ -520,7 +520,8 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
         return [self.msg_dict(r) for r in rows]
 
     def post_message(self, author, channel_name, type_, text=None, data=None, reply_to=None,
-                     *, enforce=True, demo=False, created_at=None, client_id=None, routine_id=None):
+                     *, enforce=True, demo=False, created_at=None, client_id=None, routine_id=None,
+                     chain_from=None, proposed=None):
         """Store a message after checking its shape, permissions and the anti-chatter rules.
 
         `author` is the members row of whoever is posting (set from their token,
@@ -588,7 +589,7 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
                 parent = self._task(data["parent_task"])
                 if parent is None or not self.can_see(author, self.channel(parent["channel"])):
                     raise HubError(404, f"no task {data['parent_task']}")
-            needs_ok = self.needs_approval(author, parent)
+            needs_ok = self.needs_approval(author, parent) if proposed is None else bool(proposed)
 
         if type_ == "question" and data.get("to") and self.member(data["to"]) is None:
             raise HubError(400, f"no member '{data['to']}'")
@@ -631,15 +632,19 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
                 if type_ == "task_request":
                     tc = c.execute(
                         "INSERT INTO tasks(title, details, requester, assignee, status, priority, due, channel, "
-                        "message_id, created_at, updated_at, demo, routine_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "message_id, created_at, updated_at, demo, routine_id, chain_from) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (data["title"], data["details"], author["id"], data["assignee"],
                          "proposed" if needs_ok else "open", data["priority"],
-                         data.get("due"), ch["name"], msg["id"], ts, ts, int(demo), routine_id))
+                         data.get("due"), ch["name"], msg["id"], ts, ts, int(demo), routine_id, chain_from))
                     msg["task_id"] = tc.lastrowid
                     if needs_ok:
                         # The assignee hears about it only once the boss approves.
                         notify[data["assignee"]] = None
                         tell("boss", "approval", tc.lastrowid, f"{author['name']} proposes a task for {assignee['name']}")
+                        if author["id"] == "boss":  # a routine's next step waiting for the boss
+                            notify["boss"] = ("approval", tc.lastrowid,
+                                              f"A routine's next step for {assignee['name']} is waiting for your OK")
                     else:
                         tell(data["assignee"], "assignment", tc.lastrowid)
                     self._event(c, "task", self.task_dict(self._task(tc.lastrowid)), channel=ch["name"])
@@ -687,6 +692,10 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
                             self._pause_thread(c, root, ch["name"], reason)
                 if task is not None or type_ == "task_request":
                     msg["task"] = self.task_dict(self._task(msg.get("task_id") or task["id"]))
+        if task is not None and msg["task"]["status"] == "done":
+            followup = self.chain_followup(task["id"])  # a routine's "then" step, if it has one
+            if followup is not None:
+                msg["followup_task"] = followup
         return msg
 
     def _inbox(self, c, member_id, kind, message_id=None, task_id=None, note=None, demo=False, memory_id=None):
@@ -762,6 +771,8 @@ class Hub(MemoryMixin, RoutinesMixin, BackupMixin, FilesMixin, BudgetMixin, PnlM
                                "channel", "message_id", "result_message_id", "created_at", "updated_at")}
         d["demo"] = bool(t["demo"])
         d["routine_id"] = t["routine_id"]
+        d["chain_from"] = t["chain_from"]
+        d["followup_task_id"] = t["followup_task_id"]
         if t["result_message_id"]:
             r = self.message(t["result_message_id"])
             if r is not None:

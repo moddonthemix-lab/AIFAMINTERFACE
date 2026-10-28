@@ -7,6 +7,7 @@ Times use the hub's clock, or the time zone in HUB_TZ (e.g. Europe/London).
 """
 
 import datetime as dt
+import json
 import os
 import re
 import time
@@ -71,7 +72,45 @@ class RoutinesMixin:
         d["enabled"] = bool(r["enabled"])
         d["demo"] = bool(r["demo"])
         d["schedule"] = describe(r)
+        d["then"] = {"assignee": r["then_assignee"], "title": r["then_title"], "details": r["then_details"],
+                     "channel": r["then_channel"], "approval": bool(r["then_approval"])} if r["then_assignee"] else None
         return d
+
+    def chain_followup(self, tid):
+        """A routine's task just finished: start its "then" step with the result. Returns the new task or None."""
+        t = self._task(tid)
+        if t is None or not t["routine_id"] or t["chain_from"] or t["followup_task_id"] or t["status"] != "done":
+            return None
+        r = self.q1("SELECT * FROM routines WHERE id=?", (t["routine_id"],))
+        if r is None or not r["then_assignee"] or self.member(r["then_assignee"]) is None:
+            return None
+        files = []
+        if t["result_message_id"]:
+            res = self.message(t["result_message_id"])
+            text = res["text"]
+            data = json.loads(res["data"] or "{}")
+            extra = data.get("artifacts") or []
+            if extra:
+                text += "\nArtifacts: " + ", ".join(extra)
+            if r["then_channel"] == t["channel"]:
+                files = data.get("files") or []
+        else:
+            last = self.q1("SELECT text FROM messages WHERE reply_to=? AND type='task_update' ORDER BY id DESC LIMIT 1",
+                           (t["message_id"],))
+            text = last["text"] if last and last["text"] else "(finished without a written result)"
+        who = self.member(t["assignee"])["name"]
+        details = f"{r['then_details']}\n\n--- From {who}'s result (task #{t['id']}) ---\n{text}"
+        limit = self.settings["max_text"]
+        if len(details) > limit:
+            details = details[:limit - 40].rstrip() + "\n… (cut short; see task #%d)" % t["id"]
+        data = {"title": r["then_title"], "details": details, "assignee": r["then_assignee"], "priority": r["priority"]}
+        if files:
+            data["files"] = files
+        msg = self.post_message(self.member("boss"), r["then_channel"], "task_request", data=data, enforce=False,
+                                routine_id=r["id"], chain_from=t["id"], proposed=bool(r["then_approval"]))
+        with self.tx() as c:
+            c.execute("UPDATE tasks SET followup_task_id=? WHERE id=?", (msg["task_id"], t["id"]))
+        return msg["task"]
 
     def _routine(self, rid):
         from .core import HubError
@@ -122,8 +161,25 @@ class RoutinesMixin:
         priority = f.get("priority") or "normal"
         if priority not in PRIORITIES:
             raise HubError(400, f"'priority' must be one of: {', '.join(PRIORITIES)}")
-        return {"title": title, "details": details or title, "assignee": assignee["id"], "channel": ch["name"],
-                "priority": priority, "every": every, "at": at, "weekday": weekday, "hours": hours}
+        out = {"title": title, "details": details or title, "assignee": assignee["id"], "channel": ch["name"],
+               "priority": priority, "every": every, "at": at, "weekday": weekday, "hours": hours,
+               "then_assignee": None, "then_title": None, "then_details": None, "then_channel": None,
+               "then_approval": 0}
+        nxt = (f.get("then_assignee") or "").strip().lower()
+        if nxt:
+            who = self.member(nxt)
+            if who is None or who["kind"] != "agent":
+                raise HubError(400, "the 'then' step must go to an agent")
+            then_ch = self.channel(f.get("then_channel") or ch["name"])
+            if then_ch is None or not self.can_see(who, then_ch):
+                raise HubError(400, f"@{who['id']} can't see the channel for the 'then' step")
+            then_title = (f.get("then_title") or "").strip() or f"Next: {title}"
+            then_details = (f.get("then_details") or "").strip()
+            if len(then_title) > MAX_TITLE or len(then_details) > self.settings["max_text"]:
+                raise HubError(400, "the 'then' step's title or details are too long")
+            out.update(then_assignee=who["id"], then_title=then_title, then_details=then_details or then_title,
+                       then_channel=then_ch["name"], then_approval=int(bool(f.get("then_approval"))))
+        return out
 
     def create_routine(self, fields, demo=False):
         r = self._clean_routine(fields)
@@ -131,9 +187,11 @@ class RoutinesMixin:
         with self.tx() as c:
             cur = c.execute(
                 "INSERT INTO routines(title, details, assignee, channel, priority, every, at, weekday, hours, "
-                "next_run, created_at, demo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "next_run, created_at, demo, then_assignee, then_title, then_details, then_channel, then_approval) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (r["title"], r["details"], r["assignee"], r["channel"], r["priority"], r["every"], r["at"],
-                 r["weekday"], r["hours"], next_run(r, now), now, int(demo)))
+                 r["weekday"], r["hours"], next_run(r, now), now, int(demo), r["then_assignee"], r["then_title"],
+                 r["then_details"], r["then_channel"], r["then_approval"]))
             self._event(c, "routine", {"id": cur.lastrowid}, member="boss")
         return self.routine_dict(self._routine(cur.lastrowid))
 
@@ -145,9 +203,11 @@ class RoutinesMixin:
         enabled = int(bool(merged["enabled"]))
         with self.tx() as c:
             c.execute("UPDATE routines SET title=?, details=?, assignee=?, channel=?, priority=?, every=?, at=?, "
-                      "weekday=?, hours=?, enabled=?, next_run=? WHERE id=?",
+                      "weekday=?, hours=?, enabled=?, next_run=?, then_assignee=?, then_title=?, then_details=?, "
+                      "then_channel=?, then_approval=? WHERE id=?",
                       (r["title"], r["details"], r["assignee"], r["channel"], r["priority"], r["every"], r["at"],
-                       r["weekday"], r["hours"], enabled, next_run(r, time.time()), rid))
+                       r["weekday"], r["hours"], enabled, next_run(r, time.time()), r["then_assignee"],
+                       r["then_title"], r["then_details"], r["then_channel"], r["then_approval"], rid))
             self._event(c, "routine", {"id": rid}, member="boss")
         return self.routine_dict(self._routine(rid))
 

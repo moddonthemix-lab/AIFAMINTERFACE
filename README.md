@@ -148,6 +148,10 @@ weekdays, once a week, or every few hours. Each run creates a normal task (marke
 away. If the previous task from the same routine isn't finished, that run is **skipped**, so work never
 piles up. Missed runs (hub was off) happen once when the hub comes back.
 
+**✏️ Edit** changes any routine. **➜ Then** steps chain agents: when a routine's task is finished, the hub
+creates the next agent's task with the result inside (optionally waiting for your 👍 first). The page's
+**"Your family's day"** timeline shows every routine in time order, with the hand-offs.
+
 Times use the hub machine's clock. Set `HUB_TZ` (e.g. `HUB_TZ=America/New_York`) if that clock isn't in your
 time zone. The Routines page shows the hub's current time so you can check.
 
@@ -207,6 +211,9 @@ Today page shows his latest numbers.
 - A **"Daily trading report"** routine (weekdays 16:30) is ready on the 🔁 Routines page, **paused**: resume it
   once Trader is connected.
 - Trader records each day with `hub.report_pnl(...)` (`POST /api/pnl`); reading: `GET /api/pnl`.
+- **Amo ➜ Trader:** Amo's setups routine can hand its result to Trader automatically with a routine
+  **"then" step** (Routines page → ✏️ Edit). The whole daily loop, the shared setup format and each agent's
+  part: [docs/TRADING_WORKFLOW.md](docs/TRADING_WORKFLOW.md).
 
 ## 6. The anti-chatter rules
 

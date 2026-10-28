@@ -45,6 +45,7 @@ def setup(hub):
         if hub.channel(name) is None:
             hub.create_channel(name, purpose, private=True, members=members)
     _seed_once(hub, "trader_daily_report", lambda: _trader_report_routine(hub))
+    _seed_once(hub, "amo_grade_setups", lambda: _amo_grading_routine(hub))
     return token
 
 
@@ -69,6 +70,21 @@ def _trader_report_routine(hub):
                    "outcome), today's P&L and the running total, open positions, and whether this is paper (pretend) "
                    "or live (real) money. If you made no trade, say so and explain why. Record the day's numbers "
                    "with report_pnl so the chart in #trades updates.",
+    })
+    hub.update_routine(r["id"], {"enabled": False})
+
+
+def _amo_grading_routine(hub):
+    """Amo checks his own setups after the close. Created paused, like Trader's report."""
+    if hub.member("amo") is None or hub.channel("trades") is None:
+        return
+    r = hub.create_routine({
+        "title": "Grade today's setups", "assignee": "amo", "channel": "trades", "every": "weekday",
+        "at": "16:15", "priority": "normal",
+        "details": "After the close, check every setup from your last 'top setups' post. For each one: triggered or "
+                   "not, then hit target, hit stop, or still open, with the prices. Finish with today's score "
+                   "(e.g. 3 of 4 setups worked) and your running hit rate, plus one lesson for tomorrow. "
+                   "Use the format in the hub's docs/TRADING_WORKFLOW.md.",
     })
     hub.update_routine(r["id"], {"enabled": False})
 
